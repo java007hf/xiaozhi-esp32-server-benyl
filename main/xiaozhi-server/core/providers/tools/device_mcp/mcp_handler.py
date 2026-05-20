@@ -239,15 +239,35 @@ async def send_mcp_initialize_message(conn: "ConnectionHandler"):
     """发送MCP初始化消息"""
 
     vision_url = get_vision_url(conn.config)
+    host = conn.headers.get("host", "")
+    origin = conn.headers.get("origin", "")
+    server_config = conn.config.get("server", {})
+    http_port = int(server_config.get("http_port", 8003))
+    if host:
+        host_name = host.split(":", 1)[0]
+        if host_name in ("127.0.0.1", "localhost") or host_name.startswith("192.168."):
+            vision_url = f"http://{host_name}:{http_port}/mcp/vision/explain"
 
     # 密钥生成token
     auth = AuthToken(conn.config["server"]["auth_key"])
-    token = auth.generate_token(conn.headers.get("device-id"))
+    device_id = conn.headers.get("device-id")
+    client_id = conn.headers.get("client-id")
+    token = auth.generate_token(device_id)
 
     vision = {
         "url": vision_url,
         "token": token,
     }
+
+    logger.bind(tag=TAG).info(
+        "MCP vision config: url={}, device_id={}, client_id={}, host={}, origin={}, token_len={}",
+        vision_url,
+        device_id,
+        client_id,
+        host,
+        origin,
+        len(token) if token else 0,
+    )
 
     payload = {
         "jsonrpc": "2.0",

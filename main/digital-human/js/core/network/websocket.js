@@ -337,13 +337,16 @@ export class WebSocketHandler {
             // 保存视觉分析接口地址
             const visionUrl = document.getElementById('visionUrl');
             const visionConfig = payload?.params?.capabilities?.vision;
+            log(`[vision-debug] initialize vision config: ${JSON.stringify(visionConfig || null)}`, 'info');
             if (visionConfig && typeof visionConfig === 'object' && visionConfig.url && visionConfig.token) {
                 const visionConfigStr = JSON.stringify(visionConfig);
                 localStorage.setItem('xz_tester_vision', visionConfigStr);
                 if (visionUrl) visionUrl.value = visionConfig.url;
+                log(`[vision-debug] saved vision url=${visionConfig.url}, token_len=${visionConfig.token.length}`, 'info');
             } else {
                 localStorage.removeItem('xz_tester_vision');
                 if (visionUrl) visionUrl.value = '';
+                log('[vision-debug] removed vision config because initialize payload is incomplete', 'warning');
             }
 
             const replyMessage = JSON.stringify({

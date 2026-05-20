@@ -8,6 +8,25 @@ import asyncio
 import requests
 import subprocess
 import numpy as np
+import site
+
+
+def configure_windows_opus_dll_path():
+    if os.name != "nt":
+        return
+
+    for site_packages_dir in site.getsitepackages() + [site.getusersitepackages()]:
+        pyogg_dir = os.path.join(site_packages_dir, "pyogg")
+        opus_dll = os.path.join(pyogg_dir, "opus.dll")
+        if os.path.exists(opus_dll):
+            os.environ["PATH"] = pyogg_dir + os.pathsep + os.environ.get("PATH", "")
+            if hasattr(os, "add_dll_directory"):
+                os.add_dll_directory(pyogg_dir)
+            return
+
+
+configure_windows_opus_dll_path()
+
 import opuslib_next
 from io import BytesIO
 from core.utils import p3
@@ -18,15 +37,35 @@ TAG = __name__
 
 
 def get_local_ip():
+    candidate_ips = []
+
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # Connect to Google's DNS servers
-        s.connect(("8.8.8.8", 80))
-        local_ip = s.getsockname()[0]
-        s.close()
-        return local_ip
-    except Exception as e:
+        candidate_ips.extend(socket.gethostbyname_ex(socket.gethostname())[2])
+    except Exception:
+        pass
+
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            # Connect to Google's DNS servers
+            s.connect(("8.8.8.8", 80))
+            candidate_ips.append(s.getsockname()[0])
+    except Exception:
+        pass
+
+    candidate_ips = [
+        ip
+        for ip in dict.fromkeys(candidate_ips)
+        if ip and not ip.startswith("127.") and not ip.startswith("169.254.")
+    ]
+    if not candidate_ips:
         return "127.0.0.1"
+
+    for prefix in ("192.168.", "10."):
+        for ip in candidate_ips:
+            if ip.startswith(prefix):
+                return ip
+
+    return candidate_ips[0]
 
 
 def is_private_ip(ip_addr):

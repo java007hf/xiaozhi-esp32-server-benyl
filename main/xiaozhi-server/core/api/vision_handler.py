@@ -48,8 +48,21 @@ class VisionHandler(BaseHandler):
         """处理 MCP Vision POST 请求"""
         response = None  # 初始化response变量
         try:
+            self.logger.bind(tag=TAG).info(
+                "MCP Vision POST received: remote={}, client_id={}, device_id={}, content_type={}",
+                request.remote,
+                request.headers.get("Client-Id", ""),
+                request.headers.get("Device-Id", ""),
+                request.headers.get("Content-Type", ""),
+            )
             # 验证token
             is_valid, token_device_id = self._verify_auth_token(request)
+            self.logger.bind(tag=TAG).info(
+                "MCP Vision auth result: valid={}, token_device_id={}, header_device_id={}",
+                is_valid,
+                token_device_id,
+                request.headers.get("Device-Id", ""),
+            )
             if not is_valid:
                 response = web.Response(
                     text=json.dumps(
@@ -84,6 +97,11 @@ class VisionHandler(BaseHandler):
             image_data = await image_field.read()
             if not image_data:
                 raise ValueError("图片数据为空")
+            self.logger.bind(tag=TAG).info(
+                "MCP Vision payload: question_len={}, image_bytes={}",
+                len(question),
+                len(image_data),
+            )
 
             # 检查文件大小
             if len(image_data) > MAX_FILE_SIZE:
@@ -123,11 +141,21 @@ class VisionHandler(BaseHandler):
             if not vllm_type:
                 raise ValueError(f"无法找到VLLM模块对应的供应器{vllm_type}")
 
+            self.logger.bind(tag=TAG).info(
+                "MCP Vision selected VLLM: module={}, type={}, model={}",
+                select_vllm_module,
+                vllm_type,
+                current_config["VLLM"][select_vllm_module].get("model_name", ""),
+            )
+
             vllm = create_instance(
                 vllm_type, current_config["VLLM"][select_vllm_module]
             )
 
             result = vllm.response(question, image_base64)
+            self.logger.bind(tag=TAG).info(
+                "MCP Vision response generated: chars={}", len(result or "")
+            )
 
             return_json = {
                 "success": True,

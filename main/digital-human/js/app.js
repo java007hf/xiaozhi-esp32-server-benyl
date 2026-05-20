@@ -4,7 +4,7 @@ import { getAudioPlayer } from './core/audio/player.js?v=0205';
 import { checkMicrophoneAvailability, isHttpNonLocalhost } from './core/audio/recorder.js?v=0205';
 import { initMcpTools } from './core/mcp/tools.js?v=0205';
 import { startWakewordBridgeListener } from './core/network/wakeword-bridge.js?v=0205';
-import { uiController } from './ui/controller.js?v=0205';
+import { uiController } from './ui/controller.js?v=0207';
 import { log } from './utils/logger.js?v=0205';
 
 // 辅助函数：将Base64数据转换为Blob
@@ -287,6 +287,7 @@ class App {
 
                     try {
                         const xz_tester_vision = localStorage.getItem('xz_tester_vision');
+                        log(`[vision-debug] localStorage xz_tester_vision=${xz_tester_vision || '<empty>'}`, 'info');
                         if (xz_tester_vision) {
                             let visionInfo = null;
 
@@ -297,6 +298,7 @@ class App {
                             }
 
                             const { url, token } = visionInfo || {};
+                            log(`[vision-debug] parsed url=${url || '<empty>'}, token_len=${token ? token.length : 0}`, 'info');
                             if (!url || !token) {
                                 throw new Error('视觉分析失败：配置缺少接口地址(url)或令牌(token)');
                             }
@@ -305,6 +307,7 @@ class App {
 
                             const deviceId = document.getElementById('deviceMac')?.value || '';
                             const clientId = document.getElementById('clientId')?.value || 'web_test_client';
+                            log(`[vision-debug] request device_id=${deviceId || '<empty>'}, client_id=${clientId || '<empty>'}, photo_chars=${photoData.length}`, 'info');
 
                             const formData = new FormData();
                             formData.append('question', question);
@@ -320,11 +323,15 @@ class App {
                                 }
                             });
 
+                            log(`[vision-debug] fetch completed status=${response.status}, ok=${response.ok}`, response.ok ? 'info' : 'error');
+                            const responseText = await response.text();
+                            log(`[vision-debug] response body=${responseText.substring(0, 500)}`, response.ok ? 'info' : 'error');
+
                             if (!response.ok) {
-                                throw new Error(`HTTP error! status: ${response.status}`);
+                                throw new Error(`HTTP error! status: ${response.status}, body=${responseText.substring(0, 200)}`);
                             }
 
-                            const analysisResult = await response.json();
+                            const analysisResult = JSON.parse(responseText);
                             log(`视觉分析完成: ${JSON.stringify(analysisResult).substring(0, 200)}...`, 'success');
 
                             resolve({
@@ -337,6 +344,18 @@ class App {
                             });
                         } else {
                             log('未配置视觉分析服务', 'warning');
+                            resolve({
+                                success: true,
+                                message: question,
+                                photo_data: photoData,
+                                photo_width: canvas.width,
+                                photo_height: canvas.height,
+                                vision_analysis: {
+                                    success: false,
+                                    error: 'missing vision config',
+                                    fallback: '无法连接到视觉分析服务'
+                                }
+                            });
                         }
                     } catch (error) {
                         log(`视觉分析失败: ${error.message}`, 'error');
