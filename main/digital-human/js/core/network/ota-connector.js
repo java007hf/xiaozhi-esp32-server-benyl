@@ -1,67 +1,104 @@
 import { log } from '../../utils/logger.js?v=0205';
 
-// WebSocket 连接
 export async function webSocketConnect(otaUrl, config) {
-
     if (!validateConfig(config)) {
         return;
     }
 
-    // 发送OTA请求并获取返回的websocket信息
     const otaResult = await sendOTA(otaUrl, config);
     if (!otaResult) {
-        log('无法从OTA服务器获取信息', 'error');
+        log('Unable to get websocket information from OTA server', 'error');
         return;
     }
 
-    // 从OTA响应中提取websocket信息
     const { websocket } = otaResult;
     if (!websocket || !websocket.url) {
-        log('OTA响应中缺少websocket信息', 'error');
+        log(`OTA response missing websocket.url: ${JSON.stringify(otaResult)}`, 'error');
         return;
     }
 
-    // 使用OTA返回的websocket URL
-    let connUrl = new URL(websocket.url);
+    const connUrl = buildReachableWebSocketUrl(websocket.url, otaUrl);
 
-    // 添加token参数（从OTA响应中获取）
     if (websocket.token) {
-        if (websocket.token.startsWith("Bearer ")) {
+        if (websocket.token.startsWith('Bearer ')) {
             connUrl.searchParams.append('authorization', websocket.token);
         } else {
             connUrl.searchParams.append('authorization', 'Bearer ' + websocket.token);
         }
     }
 
-    // 添加认证参数（保持原有逻辑）
     connUrl.searchParams.append('device-id', config.deviceId);
     connUrl.searchParams.append('client-id', config.clientId);
 
-    const wsurl = connUrl.toString()
+    const wsurl = connUrl.toString();
+    log(`Connecting to websocket: ${wsurl}`, 'info');
 
-    log(`正在连接: ${wsurl}`, 'info');
-
-    if (wsurl) {
-        document.getElementById('serverUrl').value = wsurl;
+    const serverUrlInput = document.getElementById('serverUrl');
+    if (serverUrlInput) {
+        serverUrlInput.value = wsurl;
     }
 
-    return new WebSocket(connUrl.toString());
+    return new WebSocket(wsurl);
 }
 
-// 验证配置
+function buildReachableWebSocketUrl(websocketUrl, otaUrl) {
+    const connUrl = new URL(websocketUrl);
+    const ota = new URL(otaUrl, window.location.href);
+
+    if (connUrl.protocol !== 'ws:' && connUrl.protocol !== 'wss:') {
+        throw new Error(`Invalid websocket protocol: ${connUrl.protocol}`);
+    }
+
+    const otaHost = ota.hostname;
+    const wsHost = connUrl.hostname;
+    const wsUsesLoopback = wsHost === '0.0.0.0' || wsHost === '127.0.0.1' || wsHost === 'localhost';
+    const wsUsesDockerBridge = isDockerBridgeHost(wsHost);
+    const otaUsesLoopback = otaHost === '127.0.0.1' || otaHost === 'localhost';
+
+    // OTA can return a server-local host. If the browser reached OTA through a
+    // different host, use that host for the websocket endpoint too.
+    if (wsUsesLoopback && !otaUsesLoopback) {
+        log(`OTA returned websocket host ${wsHost}; using OTA host ${otaHost} instead`, 'warning');
+        connUrl.hostname = otaHost;
+    }
+
+    if (wsUsesDockerBridge) {
+        log(`OTA returned Docker bridge websocket host ${wsHost}; using OTA host ${otaHost} instead`, 'warning');
+        connUrl.hostname = otaHost;
+    }
+
+    if (window.location.protocol === 'https:' && connUrl.protocol === 'ws:') {
+        log('Current page is HTTPS; switching websocket protocol to WSS', 'warning');
+        connUrl.protocol = 'wss:';
+    }
+
+    return connUrl;
+}
+
+function isDockerBridgeHost(hostname) {
+    const parts = hostname.split('.').map((part) => Number(part));
+    if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+        return false;
+    }
+
+    // Docker's default bridge networks commonly use 172.17.0.0/16 through
+    // 172.31.0.0/16. These addresses are usually unreachable from browsers on
+    // the host machine even when the container port is published.
+    return parts[0] === 172 && parts[1] >= 17 && parts[1] <= 31;
+}
+
 function validateConfig(config) {
     if (!config.deviceMac) {
-        log('设备MAC地址不能为空', 'error');
+        log('Device MAC address cannot be empty', 'error');
         return false;
     }
     if (!config.clientId) {
-        log('客户端ID不能为空', 'error');
+        log('Client ID cannot be empty', 'error');
         return false;
     }
     return true;
 }
 
-// OTA发送请求，验证状态，并返回响应数据
 async function sendOTA(otaUrl, config) {
     try {
         const res = await fetch(otaUrl, {
@@ -99,11 +136,13 @@ async function sendOTA(otaUrl, config) {
             })
         });
 
-        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+        if (!res.ok) {
+            throw new Error(`${res.status} ${res.statusText}`);
+        }
 
-        const result = await res.json();
-        return result; // 返回完整的响应数据
+        return await res.json();
     } catch (err) {
-        return null; // 失败返回null
+        log(`OTA request failed: ${err.message || err}`, 'error');
+        return null;
     }
 }

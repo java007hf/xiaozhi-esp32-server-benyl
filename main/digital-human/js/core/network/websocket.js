@@ -5,7 +5,7 @@ import { log } from '../../utils/logger.js?v=0205';
 import { getAudioPlayer } from '../audio/player.js?v=0205';
 import { getAudioRecorder } from '../audio/recorder.js?v=0205';
 import { executeMcpTool, getMcpTools, setWebSocket as setMcpWebSocket } from '../mcp/tools.js?v=0205';
-import { webSocketConnect } from './ota-connector.js?v=0205';
+import { webSocketConnect } from './ota-connector.js?v=0206';
 
 // WebSocket处理器类
 export class WebSocketHandler {
@@ -451,8 +451,9 @@ export class WebSocketHandler {
             await this.sendHelloMessage();
         };
 
-        this.websocket.onclose = () => {
-            log('已断开连接', 'info');
+        this.websocket.onclose = (event) => {
+            const closeDetail = `code=${event.code}, reason=${event.reason || 'none'}, clean=${event.wasClean}`;
+            log(`已断开连接 (${closeDetail})`, event.wasClean ? 'info' : 'warning');
 
             if (this.onConnectionStateChange) {
                 this.onConnectionStateChange(false);
@@ -474,8 +475,10 @@ export class WebSocketHandler {
         };
 
         this.websocket.onerror = (error) => {
-            log(`WebSocket错误: ${error.message || '未知错误'}`, 'error');
-            uiController.addChatMessage(`⚠️ WebSocket错误: ${error.message || '未知错误'}`, false);
+            const url = document.getElementById('serverUrl')?.value || '';
+            const detail = error.message || `readyState=${this.websocket?.readyState}, url=${url}`;
+            log(`WebSocket错误: ${detail}`, 'error');
+            uiController.addChatMessage(`⚠️ WebSocket错误: ${detail}`, false);
             if (this.onConnectionStateChange) {
                 this.onConnectionStateChange(false);
             }
