@@ -128,6 +128,16 @@ context_providers:
     headers:
       Authorization: ""
 
+# Skills follow the Codex skill directory structure:
+# skills/<skill-name>/SKILL.md with YAML frontmatter and Markdown instructions.
+# Optional metadata.xiaozhi.functions lists existing tools to expose.
+skills:
+  paths:
+    - skills
+  # Optional allow-list. If omitted, every directory containing SKILL.md is loaded.
+  # enabled:
+  #   - weather
+
 # 插件的基础配置
 plugins:
   # 获取天气插件的配置，这里填写你的api_key

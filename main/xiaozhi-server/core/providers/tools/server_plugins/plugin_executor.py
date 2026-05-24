@@ -1,11 +1,13 @@
 """服务端插件工具执行器"""
 
+import copy
 from typing import Dict, Any, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.connection import ConnectionHandler
 from ..base import ToolType, ToolDefinition, ToolExecutor
 from plugins_func.register import all_function_registry, Action, ActionResponse
+from core.providers.skills import SkillLoader
 
 
 class ServerPluginExecutor(ToolExecutor):
@@ -69,11 +71,15 @@ class ServerPluginExecutor(ToolExecutor):
                 config_functions = []
 
         # 合并所有需要的函数
-        all_required_functions = list(set(necessary_functions + config_functions))
+        skill_functions = SkillLoader(self.config).get_enabled_functions()
+        all_required_functions = list(
+            dict.fromkeys(necessary_functions + config_functions + skill_functions)
+        )
 
         for func_name in all_required_functions:
             func_item = all_function_registry.get(func_name)
             if func_item:
+                description = copy.deepcopy(func_item.description)
                 # 从函数注册中获取描述
                 fun_description = (
                     self.config.get("plugins", {})
@@ -81,20 +87,22 @@ class ServerPluginExecutor(ToolExecutor):
                     .get("description", "")
                 )
                 if fun_description is not None and len(fun_description) > 0:
-                    if "function" in func_item.description and isinstance(
-                        func_item.description["function"], dict
+                    if "function" in description and isinstance(
+                        description["function"], dict
                     ):
-                        func_item.description["function"][
-                            "description"
-                        ] = fun_description
+                        description["function"]["description"] = fun_description
 
                 # 新闻插件：根据配置更新新闻源参数描述
                 if func_name == "get_news_from_newsnow":
-                    self._init_news_source_description(func_item, func_name)
+                    self._init_news_source_description(description, func_name)
+
+                # skill runtime：根据当前配置收窄可激活的 skill 名称
+                if func_name == "activate_skill":
+                    self._init_activate_skill_description(description)
 
                 tools[func_name] = ToolDefinition(
                     name=func_name,
-                    description=func_item.description,
+                    description=description,
                     tool_type=ToolType.SERVER_PLUGIN,
                 )
 
@@ -104,7 +112,7 @@ class ServerPluginExecutor(ToolExecutor):
         """检查是否有指定的服务端插件工具"""
         return tool_name in all_function_registry
 
-    def _init_news_source_description(self, func_item, func_name):
+    def _init_news_source_description(self, description, func_name):
         """根据连接配置初始化新闻工具的参数描述"""
         news_sources = (
             self.config.get("plugins", {})
@@ -115,8 +123,23 @@ class ServerPluginExecutor(ToolExecutor):
             news_sources = "澎湃新闻;百度热搜;财联社"
         sources_str = news_sources.replace(";", "、")
         try:
-            func_item.description["function"]["parameters"]["properties"]["source"][
+            description["function"]["parameters"]["properties"]["source"][
                 "description"
             ] = f"新闻源的标准中文名称，例如{sources_str}等。可选参数，如果不提供则使用默认新闻源"
+        except (KeyError, TypeError):
+            pass
+
+    def _init_activate_skill_description(self, description):
+        """Expose enabled skill names as structured tool metadata."""
+        try:
+            skill_names = SkillLoader(self.config).get_enabled_skill_names()
+            skill_name_param = description["function"]["parameters"]["properties"][
+                "skill_name"
+            ]
+            skill_name_param["enum"] = skill_names
+            if skill_names:
+                skill_name_param[
+                    "description"
+                ] = "要激活的已启用 skill 名称。可选值: " + ", ".join(skill_names)
         except (KeyError, TypeError):
             pass

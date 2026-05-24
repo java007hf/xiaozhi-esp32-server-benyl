@@ -536,6 +536,15 @@ class ConnectionHandler:
         enhanced_prompt = self.prompt_manager.build_enhanced_prompt(
             self.config["prompt"], self.device_id, self.client_ip
         )
+        try:
+            from core.providers.skills import SkillLoader
+
+            skills_prompt = SkillLoader(self.config).build_catalog_prompt_block()
+            if skills_prompt:
+                enhanced_prompt = f"{enhanced_prompt}\n{skills_prompt}"
+        except Exception as e:
+            self.logger.bind(tag=TAG).warning(f"加载 skill 提示词失败: {e}")
+
         if enhanced_prompt:
             self.change_system_prompt(enhanced_prompt)
             self.logger.bind(tag=TAG).debug("系统提示词已增强更新")
@@ -1343,6 +1352,19 @@ class ConnectionHandler:
                             content=text,
                         )
                     )
+
+            self.dialogue.put(
+                Message(
+                    role="user",
+                    content=(
+                        "[系统提示] 你刚刚收到了工具执行结果。请把工具输出当作内部观察。"
+                        "如果工具失败，并且错误信息、可用命令、参数说明或已启用 skill 的 reference 能明确给出修正方法，"
+                        "可以继续调用工具进行有限重试；必要时先调用 activate_skill 或 skill_read_reference 获取通用 skill 指令和相关 reference。"
+                        "不要直接朗读 stdout、stderr、exit_code、JSON 或堆栈。"
+                        "如果已经成功，或无法可靠修正，请用简短自然语言给出最终结果。"
+                    ),
+                )
+            )
 
             self.chat(None, depth=depth + 1)
 
