@@ -3,11 +3,15 @@ FROM docker.m.daocloud.io/library/node:22-bookworm-slim AS node_runtime
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl ca-certificates \
     && rm -rf /var/lib/apt/lists/* \
-    && npm install -g @larksuite/cli@1.0.39
+    && npm install -g @larksuite/cli@1.0.39 hanzi-writer-data@2.0.1
 
 FROM ghcr.nju.edu.cn/xinnan-tech/xiaozhi-esp32-server:server_latest
 
 USER root
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=node_runtime /usr/local/bin/node /usr/local/bin/node
 COPY --from=node_runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
