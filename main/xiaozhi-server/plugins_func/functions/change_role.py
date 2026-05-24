@@ -43,24 +43,46 @@ change_role_function_desc = {
         "parameters": {
             "type": "object",
             "properties": {
-                "role_name": {"type": "string", "description": "要切换的角色名字"},
-                "role": {"type": "string", "description": "要切换的角色的职业"},
+                "role_name": {
+                    "type": "string",
+                    "enum": ["机车女友", "英语老师", "好奇小男孩", "软件开发助手"],
+                    "description": "要切换的角色名称，必须从可选角色中选择。",
+                },
+                "assistant_name": {
+                    "type": "string",
+                    "description": "可选，切换后助手自称的名字。未提供时默认使用角色名称。",
+                },
+                "role": {
+                    "type": "string",
+                    "description": "兼容旧参数：如果提供且是可选角色之一，也会作为角色名称使用。",
+                },
             },
-            "required": ["role", "role_name"],
+            "required": ["role_name"],
         },
     },
 }
 
 
 @register_function("change_role", change_role_function_desc, ToolType.CHANGE_SYS_PROMPT)
-def change_role(conn: "ConnectionHandler", role: str, role_name: str):
+def change_role(
+    conn: "ConnectionHandler",
+    role_name: str,
+    assistant_name: str = "",
+    role: str = "",
+):
     """切换角色"""
-    if role not in prompts:
+    selected_role = role_name if role_name in prompts else role if role in prompts else ""
+    if not selected_role:
         return ActionResponse(
             action=Action.RESPONSE, result="切换角色失败", response="不支持的角色"
         )
-    new_prompt = prompts[role].replace("{{assistant_name}}", role_name)
+    display_name = assistant_name or (
+        role_name if selected_role == role and role_name != selected_role else selected_role
+    )
+    new_prompt = prompts[selected_role].replace("{{assistant_name}}", display_name)
     conn.change_system_prompt(new_prompt)
-    logger.bind(tag=TAG).info(f"准备切换角色:{role},角色名字:{role_name}")
-    res = f"切换角色成功,我是{role}{role_name}"
+    logger.bind(tag=TAG).info(
+        f"准备切换角色:{selected_role},角色名字:{display_name}"
+    )
+    res = f"切换角色成功，我是{display_name}"
     return ActionResponse(action=Action.RESPONSE, result="切换角色已处理", response=res)
