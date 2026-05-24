@@ -98,9 +98,9 @@ class Dialogue:
         dialogue = []
 
         # 添加系统提示和记忆
-        system_message = next(
-            (msg for msg in self.dialogue if msg.role == "system"), None
-        )
+        system_messages = [msg for msg in self.dialogue if msg.role == "system"]
+        system_message = system_messages[0] if system_messages else None
+        extra_system_messages = system_messages[1:]
 
         if system_message:
             # 以 <context> 为分界点，拆分静态 system prompt 和动态上下文
@@ -163,6 +163,10 @@ class Dialogue:
                 pass
 
             dialogue.append({"role": "system", "content": dynamic_part})
+
+        for m in extra_system_messages:
+            if m.content:
+                dialogue.append({"role": "system", "content": m.content})
 
         # 第四段：实际对话历史（不含 few-shot）
         actual_messages = [m for m in non_system_messages if not m.is_temporary]

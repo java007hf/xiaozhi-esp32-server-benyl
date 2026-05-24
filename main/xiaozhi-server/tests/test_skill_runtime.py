@@ -42,7 +42,9 @@ class SkillRuntimeTests(unittest.TestCase):
             prompt = SkillLoader(self.make_config(root)).build_catalog_prompt_block()
 
             self.assertIn("`demo-skill`: Handles demo tasks.", prompt)
+            self.assertIn("Enabled skills are supported capabilities", prompt)
             self.assertIn("activate_skill", prompt)
+            self.assertIn("Do not say you cannot perform a task", prompt)
             self.assertNotIn("SECRET_COMMAND", prompt)
 
     def test_activate_skill_returns_instructions_and_resource_manifest_only(self):

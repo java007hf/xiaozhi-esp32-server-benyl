@@ -47,6 +47,8 @@ from core.utils import textUtils
 
 TAG = __name__
 
+TURN_TOOL_STATE_PREFIX = "XIAOZHI_TURN_TOOL_STATE:"
+
 auto_import_modules("plugins_func.functions")
 
 
@@ -59,7 +61,12 @@ DIRECT_ANSWER_TOOL = {
     "type": "function",
     "function": {
         "name": "direct_answer",
-        "description": "当用户的请求不匹配其他任何工具时，可用此选项直接回复。将回复内容写在response参数里。",
+        "description": (
+            "Use this option only when the user's request does not match any direct tool "
+            "or enabled file-based skill. Enabled skills count as supported capabilities. "
+            "Do not use direct_answer to refuse, ask a capability question, or claim a task "
+            "is unsupported when a matching enabled skill exists; call activate_skill first."
+        ),
         "parameters": {
             "type": "object",
             "properties": {
@@ -913,6 +920,38 @@ class ConnectionHandler:
         # 更新系统prompt至上下文
         self.dialogue.update_system_message(self.prompt)
 
+    def _clear_turn_tool_state_prompt(self):
+        self.dialogue.dialogue = [
+            msg
+            for msg in self.dialogue.dialogue
+            if not (
+                msg.role == "system"
+                and isinstance(msg.content, str)
+                and msg.content.startswith(TURN_TOOL_STATE_PREFIX)
+            )
+        ]
+
+    def _add_turn_tool_state_prompt(self):
+        if self.intent_type != "function_call":
+            return
+        self.dialogue.put(
+            Message(
+                role="system",
+                content=(
+                    f"{TURN_TOOL_STATE_PREFIX} This is a new user turn. Tool-call "
+                    "depth starts from zero again for this turn, and tools remain "
+                    "available unless the current turn explicitly reaches the "
+                    "configured max_tool_call_depth. Do not reuse an earlier "
+                    "\"tool calls are used up\" conclusion. If the previous "
+                    "assistant response asked for missing information and the user "
+                    "now provides a short answer, treat it as the missing input and "
+                    "continue the pending workflow with tools. Do not tell the user "
+                    "to perform the operation manually when an enabled tool or skill "
+                    "can do it."
+                ),
+            )
+        )
+
     def chat(self, query, depth=0):
         # 保存当前任务的sentence_id到局部变量，避免被新任务覆盖
         current_sentence_id = None
@@ -922,9 +961,11 @@ class ConnectionHandler:
 
         # 为最顶层时新建会话ID和发送FIRST请求
         if depth == 0:
+            self._clear_turn_tool_state_prompt()
             current_sentence_id = str(uuid.uuid4().hex)
             self.sentence_id = current_sentence_id  # 更新共享属性
             self.dialogue.put(Message(role="user", content=query))
+            self._add_turn_tool_state_prompt()
             self.tts.tts_text_queue.put(
                 TTSMessageDTO(
                     sentence_id=current_sentence_id,
@@ -936,8 +977,10 @@ class ConnectionHandler:
             # 递归调用时，使用当前的sentence_id
             current_sentence_id = self.sentence_id
 
-        # 设置最大递归深度，避免无限循环，可根据实际需求调整
-        MAX_DEPTH = 5
+        # 设置最大递归深度，避免无限循环。Skill 工作流通常需要
+        # activate_skill + 多个 reference + 业务命令 + 发送结果，5 层会过早截断。
+        max_tool_call_depth = int(self.config.get("max_tool_call_depth", 10))
+        MAX_DEPTH = max(5, max_tool_call_depth)
         force_final_answer = False  # 标记是否强制最终回答
 
         if depth >= MAX_DEPTH:
