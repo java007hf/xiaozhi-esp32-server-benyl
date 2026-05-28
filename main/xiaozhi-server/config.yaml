@@ -142,6 +142,19 @@ skills:
 
 # 插件的基础配置
 plugins:
+  generate_comfy_image:
+    api_urls:
+      - "http://host.docker.internal:8188"
+      - "http://127.0.0.1:8188"
+    oled_width: 128
+    oled_height: 64
+    generation_scale: 6
+    duration_ms: 15000
+    timeout_seconds: 180
+    poll_interval_seconds: 2
+    filename_prefix: "xiaozhi_oled"
+    prompt_template: "simple centered black and white line icon of {prompt}, plain white background, bold outline, clear silhouette, no text, no extra objects, high contrast, designed for a {oled_width}x{oled_height} monochrome OLED display"
+    negative_prompt: "text, letters, watermark, clutter, photo, realistic, gray background, multiple objects, tiny details, low contrast"
   # 获取天气插件的配置，这里填写你的api_key
   # 这个密钥是项目共用的key，用多了可能会被限制
   # 想稳定一点就自行申请替换，每天有1000次免费调用
