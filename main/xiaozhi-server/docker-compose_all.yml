@@ -4,7 +4,8 @@ version: '3'
 services:
   # Server模块
   xiaozhi-esp32-server:
-    image: ghcr.nju.edu.cn/xinnan-tech/xiaozhi-esp32-server:server_latest
+    image: xiaozhi-server:local
+    pull_policy: never
     container_name: xiaozhi-esp32-server
     depends_on:
       - xiaozhi-esp32-server-db
@@ -29,7 +30,8 @@ services:
 
   # manager-api和manager-web模块
   xiaozhi-esp32-server-web:
-    image: ghcr.nju.edu.cn/xinnan-tech/xiaozhi-esp32-server:web_latest
+    image: xiaozhi-web:local
+    pull_policy: never
     container_name: xiaozhi-esp32-server-web
     restart: always
     networks:
@@ -56,6 +58,7 @@ services:
   # 数据库模块
   xiaozhi-esp32-server-db:
     image: mysql:latest
+    pull_policy: never
     container_name: xiaozhi-esp32-server-db
     healthcheck:
       test: [ "CMD", "mysqladmin" ,"ping", "-h", "localhost" ]
@@ -76,7 +79,8 @@ services:
       - MYSQL_INITDB_ARGS="--character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci"
   # redis模块
   xiaozhi-esp32-server-redis:
-    image: redis:8.0
+    image: redis:8
+    pull_policy: never
     expose:
       - 6379
     container_name: xiaozhi-esp32-server-redis
