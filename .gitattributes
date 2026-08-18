@@ -1,0 +1,5 @@
+# 锁定为 LF 换行，避免 Windows 下 autocrlf 把脚本/构建文件转成 CRLF 导致容器启动失败
+* text=auto
+*.sh text eol=lf
+*.py text eol=lf
+Dockerfile* text eol=lf
