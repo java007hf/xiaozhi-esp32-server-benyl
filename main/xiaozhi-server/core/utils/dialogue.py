@@ -92,7 +92,8 @@ class Dialogue:
         return result
 
     def get_llm_dialogue_with_memory(
-            self, memory_str: str = None, voiceprint_config: dict = None
+            self, memory_str: str = None, voiceprint_config: dict = None,
+            current_speaker: str = None,
     ) -> List[Dict[str, str]]:
         # 构建对话
         dialogue = []
@@ -105,7 +106,7 @@ class Dialogue:
         if system_message:
             # 以 <context> 为分界点，拆分静态 system prompt 和动态上下文
             # 静态部分（规则、身份等）保持不变，可命中前缀缓存
-            # 动态部分（时间、天气、记忆等）作为第二条 system 消息，保持 system 权威性
+            # 动态部分（时间、记忆、说话人等）作为第二条 system 消息，保持 system 权威性
             full_prompt = system_message.content
             context_match = re.search(r"<context>", full_prompt)
             if context_match:
@@ -142,11 +143,13 @@ class Dialogue:
                     flags=re.DOTALL,
                 )
 
-            # 追加说话人信息
+            # 追加说话人信息（仅在本轮注入了有效身份时才输出，避免重复诱导模型称呼）
             try:
-                speakers = voiceprint_config.get("speakers", [])
-                if speakers:
+                current_speaker_name = (current_speaker or "").strip()
+                if current_speaker_name and current_speaker_name != "未知说话人":
+                    speakers = voiceprint_config.get("speakers", [])
                     dynamic_part += "\n<speakers_info>"
+                    dynamic_part += f"\n当前说话人：{current_speaker_name}"
                     for speaker_str in speakers:
                         try:
                             parts = speaker_str.split(",", 2)
@@ -164,6 +167,7 @@ class Dialogue:
 
             dialogue.append({"role": "system", "content": dynamic_part})
 
+        # 追加额外的 system 消息（保留 HEAD 的多条 system 消息支持）
         for m in extra_system_messages:
             if m.content:
                 dialogue.append({"role": "system", "content": m.content})
