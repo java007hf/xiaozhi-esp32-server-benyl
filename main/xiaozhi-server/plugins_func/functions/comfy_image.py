@@ -168,7 +168,8 @@ def _configured_api_urls(config: dict | None) -> list[str]:
     urls.extend(_split_urls(plugin_config.get("api_urls")))
     urls.extend(_split_urls(plugin_config.get("api_url")))
     urls.extend(_split_urls(plugin_config.get("base_url")))
-    urls.extend(DEFAULT_API_URLS)
+    if not urls:
+        urls.extend(DEFAULT_API_URLS)
 
     deduped = []
     seen = set()
@@ -207,10 +208,16 @@ def _set_clip_text(workflow: dict, node_id: str | None, text: str) -> bool:
     if not node_id or node_id not in workflow:
         return False
     inputs = workflow[node_id].setdefault("inputs", {})
-    if "text" not in inputs:
-        return False
-    inputs["text"] = text
-    return True
+    if "text" in inputs:
+        inputs["text"] = text
+        return True
+    if "clip_l" in inputs or "t5xxl" in inputs:
+        if "clip_l" in inputs:
+            inputs["clip_l"] = text
+        if "t5xxl" in inputs:
+            inputs["t5xxl"] = text
+        return True
+    return False
 
 
 def _prompt_with_suffix(prompt: str, prompt_suffix: str | None) -> str:
@@ -243,7 +250,7 @@ def _prepare_workflow(
     clip_nodes = [
         str(node_id)
         for node_id, node in workflow.items()
-        if node.get("class_type") == "CLIPTextEncode"
+        if node.get("class_type") in ("CLIPTextEncode", "CLIPTextEncodeFlux")
     ]
     positive_id = None
     negative_id = None
@@ -258,6 +265,10 @@ def _prepare_workflow(
             negative_id = negative_id or _linked_node_id(inputs, "negative")
             if "seed" in inputs:
                 inputs["seed"] = normalized_seed
+        elif class_type == "RandomNoise" and "noise_seed" in inputs:
+            inputs["noise_seed"] = normalized_seed
+        elif class_type == "BasicGuider":
+            positive_id = positive_id or _linked_node_id(inputs, "conditioning")
 
         if "width" in inputs and "height" in inputs:
             inputs["width"] = int(width)
@@ -294,7 +305,11 @@ def _request_json(method: str, api_url: str, paths: tuple[str, ...], **kwargs) -
             if response.status_code == 404:
                 last_error = RuntimeError(f"{url} returned 404")
                 continue
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except requests.HTTPError as e:
+                body = response.text[:1200]
+                raise RuntimeError(f"{url} returned {response.status_code}: {body}") from e
             return response.json()
         except requests.RequestException as e:
             if getattr(e.response, "status_code", None) == 404:
@@ -315,7 +330,11 @@ def _request_bytes(method: str, api_url: str, paths: tuple[str, ...], **kwargs) 
             if response.status_code == 404:
                 last_error = RuntimeError(f"{url} returned 404")
                 continue
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except requests.HTTPError as e:
+                body = response.text[:1200]
+                raise RuntimeError(f"{url} returned {response.status_code}: {body}") from e
             return response.content
         except requests.RequestException as e:
             if getattr(e.response, "status_code", None) == 404:

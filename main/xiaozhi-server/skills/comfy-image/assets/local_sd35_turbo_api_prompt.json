@@ -1,94 +1,128 @@
 {
   "1": {
-    "class_type": "CheckpointLoaderSimple",
+    "class_type": "UNETLoader",
     "inputs": {
-      "ckpt_name": "sd3.5m_turbo.safetensors"
+      "unet_name": "flux1-krea-dev_fp8_scaled.safetensors",
+      "weight_dtype": "default"
     }
   },
   "2": {
-    "class_type": "TripleCLIPLoader",
+    "class_type": "DualCLIPLoader",
     "inputs": {
       "clip_name1": "clip_l.safetensors",
-      "clip_name2": "clip_g.safetensors",
-      "clip_name3": "t5xxl_fp8_e4m3fn_scaled.safetensors"
+      "clip_name2": "t5xxl_fp8_e4m3fn_scaled.safetensors",
+      "type": "flux"
     }
   },
   "3": {
-    "class_type": "CLIPTextEncode",
+    "class_type": "VAELoader",
     "inputs": {
-      "clip": [
-        "2",
-        0
-      ],
-      "text": "a sharp studio photo of a red apple on a wooden table, natural window light, realistic details"
+      "vae_name": "ae.safetensors"
     }
   },
   "4": {
-    "class_type": "CLIPTextEncode",
+    "class_type": "CLIPTextEncodeFlux",
     "inputs": {
       "clip": [
         "2",
         0
       ],
-      "text": ""
+      "clip_l": "simple centered black and white line icon of mountains with river and pine trees, bold outline, no text",
+      "t5xxl": "simple centered black and white line icon of mountains with river and pine trees, bold outline, no text",
+      "guidance": 3.5
     }
   },
   "5": {
-    "class_type": "EmptySD3LatentImage",
+    "class_type": "EmptyLatentImage",
     "inputs": {
       "width": 768,
-      "height": 768,
+      "height": 384,
       "batch_size": 1
     }
   },
   "6": {
-    "class_type": "KSampler",
+    "class_type": "RandomNoise",
+    "inputs": {
+      "noise_seed": 12345
+    }
+  },
+  "7": {
+    "class_type": "BasicGuider",
     "inputs": {
       "model": [
         "1",
         0
       ],
-      "positive": [
-        "3",
+      "conditioning": [
+        "4",
+        0
+      ]
+    }
+  },
+  "8": {
+    "class_type": "KSamplerSelect",
+    "inputs": {
+      "sampler_name": "euler"
+    }
+  },
+  "9": {
+    "class_type": "BasicScheduler",
+    "inputs": {
+      "model": [
+        "1",
         0
       ],
-      "negative": [
-        "4",
+      "scheduler": "simple",
+      "steps": 20,
+      "denoise": 1.0
+    }
+  },
+  "10": {
+    "class_type": "SamplerCustomAdvanced",
+    "inputs": {
+      "noise": [
+        "6",
+        0
+      ],
+      "guider": [
+        "7",
+        0
+      ],
+      "sampler": [
+        "8",
+        0
+      ],
+      "sigmas": [
+        "9",
         0
       ],
       "latent_image": [
         "5",
         0
-      ],
-      "seed": 12345,
-      "steps": 4,
-      "cfg": 1.2,
-      "sampler_name": "euler",
-      "scheduler": "sgm_uniform",
-      "denoise": 1.0
-    }
-  },
-  "7": {
-    "class_type": "VAEDecode",
-    "inputs": {
-      "samples": [
-        "6",
-        0
-      ],
-      "vae": [
-        "1",
-        2
       ]
     }
   },
-  "8": {
+  "11": {
+    "class_type": "VAEDecode",
+    "inputs": {
+      "samples": [
+        "10",
+        0
+      ],
+      "vae": [
+        "3",
+        0
+      ]
+    }
+  },
+  "12": {
     "class_type": "SaveImage",
     "inputs": {
       "images": [
-        "7",
+        "11",
         0
       ],
-      "filename_prefix": "local_sd35_turbo"
+      "filename_prefix": "local_flux"
     }
   }
 }
