@@ -189,6 +189,42 @@ Spearheaded by Professor Siyuan Liu's Team (South China University of Technology
 
 常见问题及相关教程，可参考[这个链接](./docs/FAQ.md)
 
+#### 🔌 离线部署（无外网 / 内网环境）
+
+> 适用于无法访问公共镜像仓库（`docker.io` / `ghcr.io`）的服务器。核心思路：先在能联网的机器上把镜像导出为 tar，再到离线机器上加载并启动。
+
+**1. 在联网机器上导出镜像**
+```bash
+# server 镜像（基于源码构建，或复用已有的 xiaozhi-server:local）
+docker save xiaozhi-server:local -o xiaozhi-server-local.tar
+# web 镜像（含 manager-web 前端 + manager-api 后端，离线构建见下）
+docker save xiaozhi-web:local -o xiaozhi-web-local.tar
+# 数据库与缓存（若离线机没有，也一并导出）
+docker save mysql:latest -o mysql.tar
+docker save redis:8 -o redis.tar
+```
+
+**2. web 镜像离线构建**（可选，若需自行构建）
+项目根目录提供了 `Dockerfile-web-offline`，其基础镜像走国内镜像源（daocloud），避免直连 `docker.io` 超时：
+```bash
+docker build -f Dockerfile-web-offline -t xiaozhi-web:local .
+```
+
+**3. 在离线机器上部署**
+把上面的 tar 与仓库代码放到同一目录（tar 放在项目根目录），使用仓库根目录的 `xiaozhi_deploy.py`：
+```bash
+cd xiaozhi-esp32-server-benyl
+# recreate 会自动 docker load 两个离线 tar 并强制重建容器
+python xiaozhi_deploy.py recreate
+python xiaozhi_deploy.py status     # 确认四个服务均为 Up
+```
+常用命令：`up` / `down` / `restart` / `recreate` / `status` / `logs <服务名>` / `rebuild-web` / `--help`。
+
+**注意事项**
+- `main/xiaozhi-server/docker-compose_all.yml` 已改为使用本地镜像 `xiaozhi-server:local`、`xiaozhi-web:local`，并设 `pull_policy: never`，离线时不会去联网拉取。
+- `mysql`、`redis` 仍需离线机本地存在对应镜像（`docker load` 导入即可）。
+- 仓库通过 `.gitattributes` 锁定 `*.sh` / `*.py` / `Dockerfile*` 为 LF 换行，避免脚本被 `autocrlf` 转成 CRLF 导致容器启动报 `exec /start.sh: no such file`。
+
 > 💡 提示：以下是按最新代码部署后的测试平台，有需要可烧录测试，并发为6个，每天会清空数据，
 
 ```
