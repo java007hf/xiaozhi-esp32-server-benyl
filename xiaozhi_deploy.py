@@ -15,7 +15,7 @@ compose 文件：main/xiaozhi-server/docker-compose_all.yml
     python xiaozhi_deploy.py status            # 查看容器状态
     python xiaozhi_deploy.py logs [服务名]      # 跟踪日志，如 logs xiaozhi-esp32-server-web
     python xiaozhi_deploy.py rebuild-web       # 修复 start.sh 换行并重建 web 镜像 + 重建 web 容器
-    python xiaozhi_deploy.py rebuild           # 用本地源码重建 server 镜像 + 重建 server 容器
+    python xiaozhi_deploy.py rebuild           # 用本地源码重建 server + web 镜像，并重建两个容器
     python xiaozhi_deploy.py save              # 把本地 server/web 镜像导出为 tar 到项目根目录
     python xiaozhi_deploy.py load              # 把项目根目录的离线 tar 镜像导入 Docker（不启容器）
 
@@ -124,12 +124,12 @@ def cmd_logs(services):
     _run(_compose(["logs", "-f"] + services), check=False)
 
 
-def cmd_rebuild_web():
+def _rebuild_web_image():
+    """构建 web 镜像（修复 start.sh 换行 + docker build）。"""
     ensure_start_sh_lf()
     if not os.path.exists(WEB_DOCKERFILE):
         print(f"[错误] 未找到离线 Dockerfile：{WEB_DOCKERFILE}", file=sys.stderr)
         sys.exit(1)
-    # 1) 重建 web 镜像（构建上下文必须是项目根目录）
     print("=== 开始构建 web 镜像 ===")
     _run([
         "docker", "build",
@@ -137,7 +137,11 @@ def cmd_rebuild_web():
         "-t", IMAGE_WEB,
         SCRIPT_DIR,
     ])
-    # 2) 仅重建 web 容器使用新镜像
+
+
+def cmd_rebuild_web():
+    _rebuild_web_image()
+    # 仅重建 web 容器使用新镜像
     print("=== 重建 web 容器 ===")
     _run(_compose(["up", "-d", "--force-recreate", SERVICE_WEB]))
     print("=== web 镜像已重建并重建容器，可用 status 查看状态 ===")
@@ -155,9 +159,9 @@ def _save_tars():
 
 
 def cmd_rebuild():
-    """用本地源码重建 server 镜像，并重建 server 容器。
+    """用本地源码重建 server + web 镜像，并重建两个容器。
 
-    注意：默认 Dockerfile 仅 COPY 了 core/utils/prompt_manager.py，
+    注意：默认 server Dockerfile 仅 COPY 了 core/utils/prompt_manager.py，
     其余 server 代码来自基础镜像 xiaozhi-esp32-server:server_latest。
     如改了其它的 server 文件，请在 Dockerfile 中补充 COPY 或改为 bind mount。
     该命令不会重新加载离线 tar，避免覆盖刚构建好的镜像。
@@ -167,7 +171,8 @@ def cmd_rebuild():
     if not os.path.exists(server_dockerfile):
         print(f"[错误] 未找到 server Dockerfile：{server_dockerfile}", file=sys.stderr)
         sys.exit(1)
-    # 1) 构建 server 镜像（构建上下文必须是 main/xiaozhi-server 目录）
+
+    # 1) 构建并重建 server 镜像（构建上下文必须是 main/xiaozhi-server 目录）
     print("=== 开始构建 server 镜像 ===")
     _run([
         "docker", "build",
@@ -175,10 +180,15 @@ def cmd_rebuild():
         "-t", IMAGE_SERVER,
         server_context,
     ])
-    # 2) 仅重建 server 容器使用新镜像（不重新加载离线 tar）
     print("=== 重建 server 容器 ===")
     _run(_compose(["up", "-d", "--force-recreate", SERVICE_SERVER]))
-    print("=== server 镜像已构建并重建容器，可用 status 查看状态 ===")
+
+    # 2) 构建并重建 web 镜像
+    _rebuild_web_image()
+    print("=== 重建 web 容器 ===")
+    _run(_compose(["up", "-d", "--force-recreate", SERVICE_WEB]))
+
+    print("=== server + web 镜像已构建并重建容器，可用 status 查看状态 ===")
 
 
 def cmd_save():
