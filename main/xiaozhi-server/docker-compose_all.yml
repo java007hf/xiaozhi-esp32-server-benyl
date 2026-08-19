@@ -31,6 +31,11 @@ services:
       - ./models/SenseVoiceSmall/model.pt:/opt/xiaozhi-esp32-server/models/SenseVoiceSmall/model.pt
       # 智能体上传的技能文件夹(与智控台共享, py 脚本需真实路径才能执行)
       - ./uploaded_skills:/uploaded_skills
+      # 覆盖修改过的配置文件加载逻辑
+      - ./config/settings.py:/opt/xiaozhi-esp32-server/config/settings.py
+      - ./config/config_loader.py:/opt/xiaozhi-esp32-server/config/config_loader.py
+      - ./config/logger.py:/opt/xiaozhi-esp32-server/config/logger.py
+      - ./app.py:/opt/xiaozhi-esp32-server/app.py
 
   # manager-api和manager-web模块
   xiaozhi-esp32-server-web:

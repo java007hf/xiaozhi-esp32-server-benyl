@@ -26,9 +26,5 @@ def check_config_file():
         print("从API读取配置")
         old_config_origin = read_config(custom_config_file)
         if old_config_origin.get("selected_module") is not None:
-            error_msg = "您的配置文件好像既包含智控台的配置又包含本地配置：\n"
-            error_msg += "\n建议您：\n"
-            error_msg += "1、将根目录的config_from_api.yaml文件复制到data下，重命名为.config.yaml\n"
-            error_msg += "2、按教程配置好接口地址和密钥\n"
-            raise ValueError(error_msg)
+            print("[提示] 本地配置包含 selected_module，智控台配置将优先使用，本地配置作为默认回退")
     config_file_valid = True

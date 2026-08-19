@@ -376,6 +376,54 @@ Websocket接口地址: wss://2662r3426b.vicp.fun/xiaozhi/v1/
 
 ---
 
+## 更换服务器注意事项 🔄
+
+当你将服务迁移到新服务器（或更换IP地址）时，需要同步更新以下配置，否则设备将无法连接：
+
+### 1. 智控台参数管理（必须）
+
+登录智控台 → **参数管理**，修改以下参数：
+
+| 参数 | 说明 | 示例 |
+|:---|:---|:---|
+| `server.websocket` | WebSocket连接地址，设备通过OTA获取此地址建立长连接 | `ws://新IP:8000/xiaozhi/v1/` |
+| `server.ota` | OTA接口地址，设备通过此地址获取配置 | `http://新IP:8002/xiaozhi/ota/` |
+
+> **注意**：不能使用 `localhost` 或 `127.0.0.1`，必须填写服务器的真实局域网IP或公网IP/域名。
+
+### 2. 模型服务地址（按需）
+
+如果以下服务部署在同一台机器或需要跨网络访问，需要在智控台 → **模型管理** 中更新对应模型的 `base_url`：
+
+| 服务 | 配置项 | 说明 |
+|:---|:---|:---|
+| Ollama | `base_url` | 本地LLM服务地址，如 `http://192.168.3.104:11434` |
+| 其他自建服务 | `base_url` / `url` | 如 LM Studio、Xinference、RagFlow 等 |
+
+> **Docker 环境特别注意**：容器内的 `localhost` 指向容器自身，不是宿主机。如果 xiaozhi-server 运行在 Docker 中，访问宿主机上的服务（如 Ollama）必须使用宿主机IP，不能用 `localhost`。
+
+### 3. 本地配置文件（如使用本地配置）
+
+如果 `data/.config.yaml` 中配置了以下内容，也需要同步修改：
+
+- `server.websocket` — WebSocket 地址
+- `server.vision_explain` — 视觉分析接口地址
+- `manager-api.url` — 如果 manager-api 部署在不同服务器
+- 各模型服务的 `base_url` / `url`
+
+修改后重启 xiaozhi-server 容器生效。
+
+### 快速排查清单
+
+设备连不上时，按顺序检查：
+
+1. 新服务器的防火墙是否开放了 `8000`（WebSocket）、`8002`（智控台）、`8003`（HTTP）端口
+2. 智控台参数管理中 `server.websocket` 和 `server.ota` 是否已更新为新地址
+3. 模型服务的 `base_url` 是否从新服务器可达
+4. Docker 容器是否已重启以加载最新配置
+
+---
+
 ## 鸣谢 🙏
 
 | Logo | 项目/公司 | 说明 |

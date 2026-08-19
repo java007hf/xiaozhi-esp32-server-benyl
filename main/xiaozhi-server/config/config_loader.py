@@ -40,7 +40,7 @@ async def load_config():
     custom_config = read_config(custom_config_path)
 
     if custom_config.get("manager-api", {}).get("url"):
-        config = await get_config_from_api_async(custom_config)
+        config = await get_config_from_api_async(default_config, custom_config)
     else:
         # 合并配置
         config = merge_configs(default_config, custom_config)
@@ -52,36 +52,46 @@ async def load_config():
     return config
 
 
-async def get_config_from_api_async(config):
-    """从Java API获取配置（异步版本）"""
+async def get_config_from_api_async(default_config, custom_config):
+    """从Java API获取配置（异步版本）
+
+    本地配置（default_config + custom_config）作为基础回退，
+    API 返回的配置覆盖在本地配置之上。API 未提供的字段保留本地值。
+    """
     # 初始化API客户端
-    init_service(config)
+    init_service(custom_config)
+
+    # 先合并本地配置作为基础（custom 覆盖 default）
+    local_base = merge_configs(default_config, custom_config)
 
     # 获取服务器配置
     config_data = await get_server_config()
     if config_data is None:
         raise Exception("Failed to fetch server config from API")
 
-    config_data["read_config_from_api"] = True
-    config_data["manager-api"] = {
-        "url": config["manager-api"].get("url", ""),
-        "secret": config["manager-api"].get("secret", ""),
+    # API配置覆盖在本地配置之上
+    merged = merge_configs(local_base, config_data)
+
+    merged["read_config_from_api"] = True
+    merged["manager-api"] = {
+        "url": custom_config["manager-api"].get("url", ""),
+        "secret": custom_config["manager-api"].get("secret", ""),
     }
-    auth_enabled = config_data.get("server", {}).get("auth", {}).get("enabled", False)
+    auth_enabled = merged.get("server", {}).get("auth", {}).get("enabled", False)
     # server的配置以本地为准
-    if config.get("server"):
-        config_data["server"] = {
-            "ip": config["server"].get("ip", ""),
-            "port": config["server"].get("port", ""),
-            "http_port": config["server"].get("http_port", ""),
-            "vision_explain": config["server"].get("vision_explain", ""),
-            "auth_key": config["server"].get("auth_key", ""),
+    if custom_config.get("server"):
+        merged["server"] = {
+            "ip": custom_config["server"].get("ip", ""),
+            "port": custom_config["server"].get("port", ""),
+            "http_port": custom_config["server"].get("http_port", ""),
+            "vision_explain": custom_config["server"].get("vision_explain", ""),
+            "auth_key": custom_config["server"].get("auth_key", ""),
         }
-    config_data["server"]["auth"] = {"enabled": auth_enabled}
+    merged["server"]["auth"] = {"enabled": auth_enabled}
     # 如果服务器没有prompt_template，则从本地配置读取
-    if not config_data.get("prompt_template"):
-        config_data["prompt_template"] = config.get("prompt_template")
-    return config_data
+    if not merged.get("prompt_template"):
+        merged["prompt_template"] = custom_config.get("prompt_template")
+    return merged
 
 
 async def get_private_config_from_api(config, device_id, client_id):
