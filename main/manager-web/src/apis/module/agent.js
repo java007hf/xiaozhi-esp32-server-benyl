@@ -577,4 +577,67 @@ export default {
                 });
             }).send();
     },
+
+    // 获取智能体角色级技能配置
+    getAgentSkills(agentId, callback) {
+        RequestService.sendRequest()
+            .url(`${getServiceUrl()}/agent/${agentId}/skills`)
+            .method('GET')
+            .success((res) => {
+                RequestService.clearRequestTime();
+                callback(res);
+            })
+            .networkFail(() => {
+                RequestService.reAjaxFun(() => {
+                    this.getAgentSkills(agentId, callback);
+                });
+            }).send();
+    },
+    // 保存智能体角色级技能配置
+    saveAgentSkills(agentId, skills, callback) {
+        RequestService.sendRequest()
+            .url(`${getServiceUrl()}/agent/${agentId}/skills`)
+            .method('PUT')
+            .data(skills)
+            .success((res) => {
+                RequestService.clearRequestTime();
+                callback(res);
+            })
+            .networkFail(() => {
+                RequestService.reAjaxFun(() => {
+                    this.saveAgentSkills(agentId, skills, callback);
+                });
+            }).send();
+    },
+    // 获取智能体角色级MCP服务配置
+    getAgentMcpServers(agentId, callback) {
+        RequestService.sendRequest()
+            .url(`${getServiceUrl()}/agent/${agentId}/mcp-servers`)
+            .method('GET')
+            .success((res) => {
+                RequestService.clearRequestTime();
+                callback(res);
+            })
+            .networkFail(() => {
+                RequestService.reAjaxFun(() => {
+                    this.getAgentMcpServers(agentId, callback);
+                });
+            }).send();
+    },
+    // 保存智能体角色级MCP服务配置
+    saveAgentMcpServers(agentId, servers, callback) {
+        RequestService.sendRequest()
+            .url(`${getServiceUrl()}/agent/${agentId}/mcp-servers`)
+            .method('PUT')
+            .data(servers)
+            .success((res) => {
+                RequestService.clearRequestTime();
+                callback(res);
+            })
+            .networkFail(() => {
+                RequestService.reAjaxFun(() => {
+                    this.saveAgentMcpServers(agentId, servers, callback);
+                });
+            }).send();
+    },
 }

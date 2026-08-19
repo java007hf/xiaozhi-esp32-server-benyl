@@ -44,6 +44,8 @@ import xiaozhi.modules.agent.entity.AgentTagEntity;
 import xiaozhi.modules.agent.entity.AgentTemplateEntity;
 import xiaozhi.modules.agent.service.AgentChatHistoryService;
 import xiaozhi.modules.agent.service.AgentContextProviderService;
+import xiaozhi.modules.agent.service.AgentMcpServerService;
+import xiaozhi.modules.agent.service.AgentSkillService;
 import xiaozhi.modules.agent.service.AgentPluginMappingService;
 import xiaozhi.modules.agent.service.AgentService;
 import xiaozhi.modules.agent.service.AgentSnapshotService;
@@ -79,6 +81,8 @@ public class AgentServiceImpl extends BaseServiceImpl<AgentDao, AgentEntity> imp
     private final AgentTagService agentTagService;
     private final CorrectWordFileService correctWordFileService;
     private final AgentSnapshotService agentSnapshotService;
+    private final AgentSkillService agentSkillService;
+    private final AgentMcpServerService agentMcpServerService;
 
     @Override
     public PageData<AgentEntity> adminAgentList(Map<String, Object> params) {
@@ -113,6 +117,12 @@ public class AgentServiceImpl extends BaseServiceImpl<AgentDao, AgentEntity> imp
         // 查询替换词文件ID列表
         List<String> correctWordFileIds = correctWordFileService.getAgentCorrectWordFileIds(id);
         agent.setCorrectWordFileIds(correctWordFileIds);
+
+        // 查询角色级技能配置
+        agent.setSkills(agentSkillService.getByAgentId(id));
+        // 查询角色级MCP服务配置
+        agent.setMcpServers(agentMcpServerService.getByAgentId(id));
+
         agent.setCurrentVersionNo(agentSnapshotService.getCurrentVersionNo(id));
 
         // 无需额外查询插件列表，已通过SQL查询出来
@@ -219,6 +229,8 @@ public class AgentServiceImpl extends BaseServiceImpl<AgentDao, AgentEntity> imp
         agentChatHistoryService.deleteByAgentId(agentId, true, true);
         agentPluginMappingService.deleteByAgentId(agentId);
         agentContextProviderService.deleteByAgentId(agentId);
+        agentSkillService.deleteByAgentId(agentId);
+        agentMcpServerService.deleteByAgentId(agentId);
         correctWordFileService.deleteMappingsByAgentId(agentId);
         agentTagService.deleteAgentTags(agentId);
         agentSnapshotService.deleteByAgentId(agentId);
@@ -531,6 +543,21 @@ public class AgentServiceImpl extends BaseServiceImpl<AgentDao, AgentEntity> imp
         // 更新智能体标签
         if (dto.getTagNames() != null || dto.getTagIds() != null) {
             agentTagService.saveAgentTags(agentId, dto.getTagIds(), dto.getTagNames());
+        }
+
+        // 更新角色级技能配置
+        if (dto.getSkills() != null) {
+            agentSkillService.saveOrUpdateByAgentId(agentId, dto.getSkills(), user.getId());
+        }
+
+        // 更新角色级MCP服务配置
+        if (dto.getMcpServers() != null) {
+            agentMcpServerService.saveOrUpdateByAgentId(agentId, dto.getMcpServers(), user.getId());
+        }
+
+        // 更新技能沙箱运行配置
+        if (dto.getSandboxConfig() != null) {
+            existingEntity.setSandboxConfig(dto.getSandboxConfig());
         }
 
         boolean b = validateLLMIntentParams(existingEntity.getLlmModelId(), existingEntity.getIntentModelId());

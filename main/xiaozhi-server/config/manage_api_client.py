@@ -196,6 +196,41 @@ async def get_correct_words(mac_address: str) -> Optional[Dict]:
         return None
 
 
+async def get_agent_skills(
+    mac_address: str, client_id: str, config: Optional[Dict] = None
+) -> Optional[Dict]:
+    """获取角色级技能定义与沙箱配置(供技能加载)
+
+    返回形如 {"skills_definitions": [...], "sandbox": {...}} 的字典。
+    """
+    try:
+        return await ManageApiClient._instance._execute_async_request(
+            "POST", "/config/agent-skills",
+            json={"macAddress": mac_address, "clientId": client_id},
+        ) or {}
+    except Exception as e:  # pragma: no cover - 网络/业务异常时降级
+        print(f"获取角色技能配置失败: {e}")
+        return None
+
+
+async def get_agent_mcp_servers(
+    mac_address: str, client_id: str, config: Optional[Dict] = None
+) -> Optional[Dict]:
+    """获取角色级 MCP 服务配置(供 server_mcp 加载)
+
+    返回形如 {"mcp_servers": {name: {...}}} 的字典。
+    """
+    try:
+        data = await ManageApiClient._instance._execute_async_request(
+            "POST", "/config/agent-mcp",
+            json={"macAddress": mac_address, "clientId": client_id},
+        ) or {}
+        return data.get("mcp_servers") or {}
+    except Exception as e:  # pragma: no cover - 网络/业务异常时降级
+        print(f"获取角色MCP配置失败: {e}")
+        return None
+
+
 async def generate_and_save_chat_summary(session_id: str) -> Optional[Dict]:
     """生成并保存聊天记录总结"""
     try:

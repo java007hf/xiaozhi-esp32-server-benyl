@@ -338,6 +338,40 @@
                           >
                             {{ $t("roleConfig.editFunctions") }}
                           </el-button>
+                          <el-button
+                            class="edit-function-btn"
+                            @click="openSkillDialog"
+                            :class="{ 'active-btn': showSkillDialog }"
+                          >
+                            {{ $t("roleConfig.editSkills") }}
+                          </el-button>
+                          <el-button
+                            class="edit-function-btn"
+                            @click="openMcpDialog"
+                            :class="{ 'active-btn': showMcpDialog }"
+                          >
+                            {{ $t("roleConfig.editMcpServers") }}
+                          </el-button>
+                          <span class="sandbox-inline">
+                            <el-tooltip :content="$t('roleConfig.sandboxTip')" placement="top">
+                              <el-switch
+                                v-model="sandboxEnabled"
+                                :active-text="$t('roleConfig.sandbox')"
+                                @change="onSandboxChange"
+                              />
+                            </el-tooltip>
+                            <template v-if="sandboxEnabled">
+                              <el-checkbox v-model="sandboxNetwork" class="sandbox-opt">{{ $t("roleConfig.sandboxNetwork") }}</el-checkbox>
+                              <el-input-number
+                                v-model="sandboxTimeout"
+                                :min="1"
+                                :max="300"
+                                size="mini"
+                                class="sandbox-timeout"
+                                :placeholder="$t('roleConfig.sandboxTimeout')"
+                              />
+                            </template>
+                          </span>
                         </div>
                         <div
                           v-if="
@@ -461,6 +495,20 @@
       @update-functions="handleUpdateFunctions"
       @dialog-closed="handleDialogClosed"
     />
+    <skill-dialog
+      v-model="showSkillDialog"
+      :skills="currentSkills"
+      :agent-id="$route.query.agentId"
+      @update-skills="handleUpdateSkills"
+      @dialog-closed="handleSkillDialogClosed"
+    />
+    <mcp-server-dialog
+      v-model="showMcpDialog"
+      :mcp-servers="currentMcpServers"
+      :agent-id="$route.query.agentId"
+      @update-mcp-servers="handleUpdateMcpServers"
+      @dialog-closed="handleMcpDialogClosed"
+    />
     <context-provider-dialog
       :visible.sync="showContextProviderDialog"
       :providers="currentContextProviders"
@@ -490,6 +538,8 @@ import Api from "@/apis/api";
 import { getServiceUrl } from "@/apis/api";
 import RequestService from "@/apis/httpRequest";
 import FunctionDialog from "@/components/FunctionDialog.vue";
+import SkillDialog from "@/components/SkillDialog.vue";
+import McpServerDialog from "@/components/McpServerDialog.vue";
 import ContextProviderDialog from "@/components/ContextProviderDialog.vue";
 import TtsAdvancedSettings from "@/components/TtsAdvancedSettings.vue";
 import AgentSnapshotDialog from "@/components/AgentSnapshotDialog.vue";
@@ -500,7 +550,7 @@ import VersionFooter from "@/components/VersionFooter.vue";
 
 export default {
   name: "RoleConfigPage",
-  components: { HeaderBar, FunctionDialog, ContextProviderDialog, TtsAdvancedSettings, AgentSnapshotDialog, VersionFooter },
+  components: { HeaderBar, FunctionDialog, SkillDialog, McpServerDialog, ContextProviderDialog, TtsAdvancedSettings, AgentSnapshotDialog, VersionFooter },
   data() {
     return {
       showContextProviderDialog: false,
@@ -557,6 +607,13 @@ export default {
       currentFunctions: [],
       currentContextProviders: [],
       allFunctions: [],
+      showSkillDialog: false,
+      currentSkills: [],
+      showMcpDialog: false,
+      currentMcpServers: [],
+      sandboxEnabled: false,
+      sandboxNetwork: false,
+      sandboxTimeout: 30,
       originalFunctions: [],
       playingVoice: false,
       isPaused: false,
@@ -654,6 +711,9 @@ export default {
         }),
         contextProviders: this.currentContextProviders,
         correctWordFileIds: this.checkedReplacementWordIds,
+        skills: this.currentSkills,
+        mcpServers: this.currentMcpServers,
+        sandboxConfig: JSON.stringify(this.buildSandboxConfig()),
       };
       const tagNames = this.dynamicTags.map(tag => tag.tagName);
       const tagsChanged = !this.isSameStringList(tagNames, this.originalTagNames);
@@ -1013,6 +1073,9 @@ export default {
             this.checkedReplacementWordIds = agentData.correctWordFileIds || [];
             this.currentContextProviders = agentData.contextProviders || [];
             this.currentFunctions = this.buildCurrentFunctions(agentData.functions || []);
+            this.currentSkills = this.normalizeSkills(agentData.skills || []);
+            this.currentMcpServers = this.normalizeMcpServers(agentData.mcpServers || []);
+            this.initSandboxConfig(agentData.sandboxConfig);
             this.originalFunctions = JSON.parse(JSON.stringify(this.currentFunctions));
             this.agentFunctionsLoaded = true;
             this.agentConfigLoaded = true;
@@ -1889,6 +1952,105 @@ export default {
           }
         });
       });
+    },
+
+    // ---------- 技能 (Skills) ----------
+    parseJsonField(value, fallback) {
+      if (value === null || value === undefined) {
+        return fallback;
+      }
+      if (typeof value === 'string') {
+        if (!value.trim()) {
+          return fallback;
+        }
+        try {
+          const parsed = JSON.parse(value);
+          return parsed === null || parsed === undefined ? fallback : parsed;
+        } catch (error) {
+          return fallback;
+        }
+      }
+      return value;
+    },
+    normalizeSkills(list) {
+      return (list || []).map((item) => ({
+        id: item.id || null,
+        skillName: item.skillName || '',
+        description: item.description || '',
+        content: item.content || '',
+        functions: this.parseJsonField(item.functions, []),
+        files: this.parseJsonField(item.files, {}),
+        enabled: item.enabled === undefined
+          ? true
+          : (item.enabled === 1 || item.enabled === true),
+        sort: typeof item.sort === 'number' ? item.sort : 0
+      }));
+    },
+    normalizeMcpServers(list) {
+      return (list || []).map((item) => ({
+        id: item.id || null,
+        serverName: item.serverName || '',
+        transport: item.transport || 'stdio',
+        command: item.command || '',
+        args: this.parseJsonField(item.args, []),
+        url: item.url || '',
+        env: this.parseJsonField(item.env, {}),
+        headers: this.parseJsonField(item.headers, {}),
+        enabled: item.enabled === undefined
+          ? true
+          : (item.enabled === 1 || item.enabled === true),
+        sort: typeof item.sort === 'number' ? item.sort : 0
+      }));
+    },
+    openSkillDialog() {
+      if (this.agentReloading || !this.agentConfigLoaded) {
+        return;
+      }
+      this.showSkillDialog = true;
+    },
+    openMcpDialog() {
+      if (this.agentReloading || !this.agentConfigLoaded) {
+        return;
+      }
+      this.showMcpDialog = true;
+    },
+    handleUpdateSkills(skills) {
+      this.currentSkills = skills;
+    },
+    handleUpdateMcpServers(servers) {
+      this.currentMcpServers = servers;
+    },
+    handleSkillDialogClosed() {
+      this.showSkillDialog = false;
+    },
+    handleMcpDialogClosed() {
+      this.showMcpDialog = false;
+    },
+    // ---------- 技能沙箱 (Sandbox) ----------
+    initSandboxConfig(value) {
+      let cfg = {};
+      if (typeof value === 'string' && value.trim()) {
+        try {
+          cfg = JSON.parse(value);
+        } catch (error) {
+          cfg = {};
+        }
+      } else if (value && typeof value === 'object') {
+        cfg = value;
+      }
+      this.sandboxEnabled = !!(cfg && cfg.enabled);
+      this.sandboxNetwork = !!(cfg && cfg.network);
+      this.sandboxTimeout = (cfg && typeof cfg.timeout === 'number') ? cfg.timeout : 30;
+    },
+    buildSandboxConfig() {
+      return {
+        enabled: !!this.sandboxEnabled,
+        network: !!this.sandboxNetwork,
+        timeout: Number(this.sandboxTimeout) || 30
+      };
+    },
+    onSandboxChange() {
+      // 仅更新本地状态，真正落库在 saveConfig 时通过 buildSandboxConfig 序列化
     }
   },
   beforeDestroy() {

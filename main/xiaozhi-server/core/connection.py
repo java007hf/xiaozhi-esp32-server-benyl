@@ -931,6 +931,12 @@ class ConnectionHandler:
             self.config["mcp_endpoint"] = private_config["mcp_endpoint"]
         if private_config.get("context_providers", None) is not None:
             self.config["context_providers"] = private_config["context_providers"]
+        if private_config.get("skills_definitions", None) is not None:
+            self.config["skills_definitions"] = private_config["skills_definitions"]
+        if private_config.get("mcp_servers", None) is not None:
+            self.config["mcp_servers"] = private_config["mcp_servers"]
+        if private_config.get("sandbox", None) is not None:
+            self.config.setdefault("skills", {})["sandbox"] = private_config["sandbox"]
 
         # 注入替换词到 TTS 模块配置
         if private_config.get("correct_words", None) is not None:

@@ -62,12 +62,27 @@ def skill_read_reference(
         if not skill_name or not rel_path:
             return ActionResponse(Action.REQLLM, result="skill_name和path不能为空")
 
-        loader = SkillLoader(conn.config)
+        loader = SkillLoader(conn.config, conn.config.get("skills_definitions"))
         skills = loader.get_enabled_skills()
         skill_by_name = {skill.name: skill for skill in skills}
         source_skill = skill_by_name.get(skill_name)
         if source_skill is None:
             return ActionResponse(Action.REQLLM, result=f"skill未启用或不存在: {skill_name}")
+
+        # In-memory skills serve their resources directly from the ``files`` map.
+        if source_skill.source == "memory":
+            content = source_skill.files.get(path) or source_skill.files.get(rel_path)
+            if content is None:
+                return ActionResponse(
+                    Action.REQLLM, result=f"引用文件不存在(in-memory): {path}"
+                )
+            max_len = max(1000, min(int(max_chars or 12000), 30000))
+            truncated = len(content) > max_len
+            if truncated:
+                content = content[:max_len] + "\n...<reference truncated>"
+            logger.bind(tag=TAG).info(f"读取skill引用文件(in-memory): {skill_name}:{path}")
+            result = f"# skill reference: {skill_name}/{path}\n\n{content}"
+            return ActionResponse(Action.REQLLM, result=result)
 
         enabled_roots = [os.path.realpath(skill.path) for skill in skills]
         candidate = os.path.realpath(os.path.join(source_skill.path, rel_path))

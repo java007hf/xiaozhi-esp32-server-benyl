@@ -5,9 +5,36 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from core.providers.skills import SkillLoader
+from core.providers.skills.skill_source import parse_skill_defs
 from core.providers.tools.server_plugins.plugin_executor import ServerPluginExecutor
 from plugins_func.functions.activate_skill import activate_skill
 from plugins_func.functions.skill_read_reference import skill_read_reference
+
+
+def memory_skill_def(
+    name="memory-skill",
+    description="Memory only skill.",
+    functions=None,
+    files=None,
+    body="Memory body instructions.",
+):
+    functions = functions or ["shell_command"]
+    files = files or {"scripts/main.py": "print('hi')"}
+    content = (
+        f"---\nname: {name}\n"
+        f"description: \"{description}\"\n"
+        "metadata:\n  xiaozhi:\n    functions:\n"
+        + "\n".join(f"      - {fn}" for fn in functions)
+        + f"\n---\n\n{body}"
+    )
+    return {
+        "id": "mem-1",
+        "name": name,
+        "description": description,
+        "content": content,
+        "functions": functions,
+        "files": files,
+    }
 
 
 def write_skill(root: Path, name: str, description: str, body: str, metadata: str = ""):
@@ -123,6 +150,95 @@ metadata:
                 skill_name_schema["enum"],
                 ["demo-skill", "skill-runtime"],
             )
+
+
+class InMemorySkillTests(unittest.TestCase):
+    """Skills delivered from the manager API (DB) instead of the file system."""
+
+    def test_memory_skill_loaded_with_functions(self):
+        loader = SkillLoader({"skills": {"paths": []}}, skill_definitions=[memory_skill_def()])
+        skills = loader.get_enabled_skills()
+
+        self.assertEqual(len(skills), 1)
+        skill = skills[0]
+        self.assertEqual(skill.name, "memory-skill")
+        self.assertEqual(skill.source, "memory")
+        self.assertEqual(skill.functions, ["shell_command"])
+        self.assertIn("print('hi')", skill.files["scripts/main.py"])
+
+    def test_memory_skill_appears_in_catalog(self):
+        loader = SkillLoader({"skills": {"paths": []}}, skill_definitions=[memory_skill_def()])
+        catalog = loader.build_catalog_prompt_block()
+
+        self.assertIn("`memory-skill`: Memory only skill.", catalog)
+        self.assertIn("activate_skill", catalog)
+
+    def test_memory_skill_resources_from_files(self):
+        loader = SkillLoader({"skills": {"paths": []}}, skill_definitions=[memory_skill_def()])
+        skill = loader.get_skill("memory-skill")
+        resources = loader.list_skill_resources(skill)
+
+        self.assertIn("scripts", resources)
+        self.assertIn("scripts/main.py", resources["scripts"])
+
+    def test_filesystem_and_memory_skills_merge(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write_skill(root, "fs-skill", "From disk.", "Disk instructions.")
+
+            loader = SkillLoader(
+                {"skills": {"paths": [str(root)]}},
+                skill_definitions=[memory_skill_def()],
+            )
+            names = {s.name for s in loader.get_enabled_skills()}
+
+            self.assertEqual(names, {"fs-skill", "memory-skill"})
+
+    def test_memory_skills_bypass_global_enabled_allowlist(self):
+        # Role-level (in-memory) skills are already filtered by their own
+        # `enabled` flag on the manager side, so they must NOT be silently
+        # hidden by the global file-system allow-list. See skill_loader.py
+        # get_enabled_skills(): the allow-list only restricts file-system skills.
+        loader = SkillLoader(
+            {"skills": {"enabled": ["memory-skill"]}},
+            skill_definitions=[memory_skill_def(), memory_skill_def(name="other-skill", description="Other.")],
+        )
+        names = {s.name for s in loader.get_enabled_skills()}
+
+        self.assertEqual(names, {"memory-skill", "other-skill"})
+
+    def test_parse_skill_defs_drops_invalid_entries(self):
+        raw = [
+            memory_skill_def(),
+            {"id": "bad"},
+            "not-a-dict",
+            None,
+        ]
+        parsed = parse_skill_defs(raw)
+
+        self.assertEqual(len(parsed), 1)
+        self.assertEqual(parsed[0].name, "memory-skill")
+
+    def test_activate_skill_reads_memory_skill(self):
+        config = {"skills": {"paths": []}, "skills_definitions": [memory_skill_def()]}
+        conn = SimpleNamespace(config=config)
+
+        result = activate_skill(conn, "memory-skill")
+
+        self.assertIn("# activated skill: memory-skill", result.result)
+        self.assertIn("(in-memory)", result.result)
+        self.assertIn("scripts/main.py", result.result)
+        self.assertIn("Memory body instructions.", result.result)
+
+    def test_skill_read_reference_reads_memory_file(self):
+        config = {"skills": {"paths": []}, "skills_definitions": [memory_skill_def()]}
+        conn = SimpleNamespace(config=config)
+
+        ok = skill_read_reference(conn, "memory-skill", "scripts/main.py")
+        missing = skill_read_reference(conn, "memory-skill", "scripts/nope.py")
+
+        self.assertIn("print('hi')", ok.result)
+        self.assertIn("引用文件不存在(in-memory)", missing.result)
 
 
 if __name__ == "__main__":

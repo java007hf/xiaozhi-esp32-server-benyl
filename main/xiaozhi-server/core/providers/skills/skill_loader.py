@@ -9,12 +9,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import yaml
 
 from config.config_loader import get_project_dir
 from config.logger import setup_logging
+from core.providers.skills.skill_source import parse_skill_defs
 
 TAG = __name__
 logger = setup_logging()
@@ -27,14 +28,23 @@ class Skill:
     functions: List[str] = field(default_factory=list)
     prompt: str = ""
     path: str = ""
+    files: Dict[str, str] = field(default_factory=dict)  # in-memory skills only
+    source: str = "filesystem"  # "filesystem" | "memory"
 
 
 class SkillLoader:
-    """Loads enabled skills from configured directories."""
+    """Loads enabled skills from configured directories and/or in-memory defs."""
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], skill_definitions: Optional[List[Dict[str, Any]]] = None):
         self.config = config or {}
         self.skills_config = self.config.get("skills", {}) or {}
+        # In-memory skill definitions delivered from the manager (API / DB).
+        # Fall back to `config["skills_definitions"]` so callers that build a
+        # SkillLoader from a connection config (e.g. `SkillLoader(self.config)`)
+        # also pick up manager-delivered skills.
+        if skill_definitions is None:
+            skill_definitions = self.config.get("skills_definitions")
+        self.skill_defs = parse_skill_defs(skill_definitions)
         self._skills: List[Skill] | None = None
 
     def get_enabled_skills(self) -> List[Skill]:
@@ -46,7 +56,8 @@ class SkillLoader:
         if enabled_names is not None:
             enabled_set = {str(name) for name in enabled_names}
 
-        skills = []
+        skills: List[Skill] = []
+        # 1) File-system skills (scanned from configured paths).
         for skill_dir in self._get_skill_dirs():
             skill_path = os.path.join(skill_dir, "SKILL.md")
             if not os.path.exists(skill_path):
@@ -56,7 +67,19 @@ class SkillLoader:
             if not skill:
                 continue
 
+            # The global allow-list only restricts file-system skills.
             if enabled_set is not None and skill.name not in enabled_set:
+                continue
+
+            skills.append(skill)
+
+        # 2) In-memory skills (from the manager API / DB).
+        # These are already filtered by their own `enabled` flag on the manager
+        # side, so they are NOT subject to the global file-system allow-list
+        # (otherwise role-level skills could be silently hidden).
+        for skill_def in self.skill_defs:
+            skill = self._load_memory_skill(skill_def)
+            if not skill:
                 continue
 
             skills.append(skill)
@@ -122,6 +145,18 @@ class SkillLoader:
 
     def list_skill_resources(self, skill: Skill, max_files: int = 80) -> Dict[str, List[str]]:
         resources: Dict[str, List[str]] = {}
+
+        # In-memory skills expose their resources through ``files`` keys.
+        if skill.source == "memory" and skill.files:
+            grouped: Dict[str, List[str]] = {}
+            for rel_path in skill.files:
+                top = rel_path.split("/", 1)[0] or "scripts"
+                grouped.setdefault(top, []).append(rel_path)
+            for dirname, items in grouped.items():
+                items.sort()
+                resources[dirname] = items[:max_files]
+            return resources
+
         for dirname in ["references", "scripts", "assets"]:
             root = os.path.join(skill.path, dirname)
             if not os.path.isdir(root):
@@ -148,7 +183,9 @@ class SkillLoader:
 
     def _get_skill_dirs(self) -> List[str]:
         project_dir = get_project_dir()
-        configured_paths = self.skills_config.get("paths") or ["skills"]
+        configured_paths = self.skills_config.get("paths")
+        if configured_paths is None:
+            configured_paths = ["skills"]
         skill_dirs: List[str] = []
 
         for path in configured_paths:
@@ -195,6 +232,40 @@ class SkillLoader:
             )
         except Exception as e:
             logger.bind(tag=TAG).error(f"加载 skill 失败 {skill_path}: {e}")
+            return None
+
+    def _load_memory_skill(self, skill_def) -> Skill | None:
+        """Build a :class:`Skill` from an in-memory :class:`SkillDef`."""
+        try:
+            content = skill_def.content or ""
+            manifest, body = self._split_frontmatter(content) if content else ({}, "")
+            name = str(manifest.get("name") or skill_def.name or "").strip()
+            description = str(
+                manifest.get("description") or skill_def.description or ""
+            ).strip()
+            if not name or not description:
+                logger.bind(tag=TAG).warning(
+                    f"Memory skill requires name and description: {skill_def.skill_id}"
+                )
+                return None
+
+            functions = self._get_xiaozhi_functions(manifest)
+            if not isinstance(functions, list):
+                functions = []
+            if not functions and skill_def.functions:
+                functions = list(skill_def.functions)
+
+            return Skill(
+                name=name,
+                description=description,
+                functions=[str(function) for function in functions],
+                prompt=body,
+                path="",
+                files=dict(skill_def.files or {}),
+                source="memory",
+            )
+        except Exception as e:
+            logger.bind(tag=TAG).error(f"加载内存 skill 失败: {e}")
             return None
 
     def _split_frontmatter(self, content: str) -> tuple[Dict[str, Any] | None, str]:

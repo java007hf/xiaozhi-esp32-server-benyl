@@ -47,11 +47,15 @@ import xiaozhi.modules.agent.entity.AgentEntity;
 import xiaozhi.modules.agent.entity.AgentTemplateEntity;
 import xiaozhi.modules.agent.dto.AgentTagDTO;
 import xiaozhi.modules.agent.entity.AgentTagEntity;
+import xiaozhi.modules.agent.entity.AgentSkillEntity;
+import xiaozhi.modules.agent.entity.AgentMcpServerEntity;
 import xiaozhi.modules.agent.service.AgentTagService;
 import xiaozhi.modules.agent.service.AgentChatAudioService;
 import xiaozhi.modules.agent.service.AgentChatHistoryService;
 import xiaozhi.modules.agent.service.AgentChatSummaryService;
+import xiaozhi.modules.agent.service.AgentMcpServerService;
 import xiaozhi.modules.agent.service.AgentService;
+import xiaozhi.modules.agent.service.AgentSkillService;
 import xiaozhi.modules.agent.service.AgentTemplateService;
 import xiaozhi.modules.agent.vo.AgentChatHistoryUserVO;
 import xiaozhi.modules.agent.vo.AgentInfoVO;
@@ -66,6 +70,8 @@ public class AgentController {
 
     private final AgentService agentService;
     private final AgentTemplateService agentTemplateService;
+    private final AgentSkillService agentSkillService;
+    private final AgentMcpServerService agentMcpServerService;
     private final AgentChatHistoryService agentChatHistoryService;
     private final AgentChatAudioService agentChatAudioService;
     private final AgentChatSummaryService agentChatSummaryService;
@@ -347,6 +353,44 @@ public class AgentController {
         dto.setTagIds(tagIds);
         dto.setTagNames(tagNames);
         agentService.updateAgentById(id, dto);
+        return new Result<Void>().ok(null);
+    }
+
+    @GetMapping("/{id}/skills")
+    @Operation(summary = "获取智能体的技能配置")
+    @RequiresPermissions("sys:role:normal")
+    public Result<List<AgentSkillEntity>> getAgentSkills(@PathVariable("id") String id) {
+        requireAgentPermission(id);
+        return new Result<List<AgentSkillEntity>>().ok(agentSkillService.getByAgentId(id));
+    }
+
+    @PutMapping("/{id}/skills")
+    @Operation(summary = "保存智能体的技能配置")
+    @RequiresPermissions("sys:role:normal")
+    public Result<Void> saveAgentSkills(
+            @PathVariable("id") String id,
+            @RequestBody List<AgentUpdateDTO.AgentSkillItem> skills) {
+        requireAgentPermission(id);
+        agentSkillService.saveOrUpdateByAgentId(id, skills, SecurityUser.getUserId());
+        return new Result<Void>().ok(null);
+    }
+
+    @GetMapping("/{id}/mcp-servers")
+    @Operation(summary = "获取智能体的MCP服务配置")
+    @RequiresPermissions("sys:role:normal")
+    public Result<List<AgentMcpServerEntity>> getAgentMcpServers(@PathVariable("id") String id) {
+        requireAgentPermission(id);
+        return new Result<List<AgentMcpServerEntity>>().ok(agentMcpServerService.getByAgentId(id));
+    }
+
+    @PutMapping("/{id}/mcp-servers")
+    @Operation(summary = "保存智能体的MCP服务配置")
+    @RequiresPermissions("sys:role:normal")
+    public Result<Void> saveAgentMcpServers(
+            @PathVariable("id") String id,
+            @RequestBody List<AgentUpdateDTO.AgentMcpServerItem> mcpServers) {
+        requireAgentPermission(id);
+        agentMcpServerService.saveOrUpdateByAgentId(id, mcpServers, SecurityUser.getUserId());
         return new Result<Void>().ok(null);
     }
 

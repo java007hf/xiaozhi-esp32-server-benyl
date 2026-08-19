@@ -4,6 +4,7 @@ import subprocess
 from typing import TYPE_CHECKING
 
 from config.logger import setup_logging
+from core.providers.tools.sandbox.runner import run_sandboxed
 from plugins_func.register import register_function, ToolType, ActionResponse, Action
 
 if TYPE_CHECKING:
@@ -55,6 +56,14 @@ SHELL_COMMAND_FUNCTION_DESC = {
 def _get_runner_config(conn: "ConnectionHandler"):
     skills_config = conn.config.get("skills", {}) or {}
     return skills_config.get("shell", {}) or skills_config.get("command_runner", {}) or {}
+
+
+def _get_sandbox_config(conn: "ConnectionHandler"):
+    skills_config = conn.config.get("skills", {}) or {}
+    return skills_config.get("sandbox", {}) or {}
+
+
+_PYTHON_COMMANDS = {"python", "python3", "python.exe"}
 
 
 def _project_dir():
@@ -124,6 +133,29 @@ def shell_command(
         logger.bind(tag=TAG).info(
             f"执行shell_command: {cmd if use_shell else shlex.join(cmd)}"
         )
+
+        # 当 skills 沙箱启用时，对所有命令走受限子进程执行(资源限制/降权/可选断网)，
+        # 不再仅限于 Python。Windows 下无 setuid/resource 原语时自动降级为仅超时。
+        sandbox_config = _get_sandbox_config(conn)
+        if sandbox_config.get("enabled"):
+            if use_shell:
+                # ``cmd`` is already a fully built shell string here.
+                argv = ["sh", "-c", cmd]
+            else:
+                argv = [command] + normalized_args
+            sandbox_result = run_sandboxed(
+                argv, cwd=workdir, config=sandbox_config
+            )
+            result = _format_output(
+                sandbox_result.stdout,
+                sandbox_result.stderr,
+                sandbox_result.returncode,
+                max_chars,
+            )
+            if sandbox_result.timed_out:
+                result += "\n...<sandbox execution timed out>"
+            return ActionResponse(Action.REQLLM, result=result)
+
         completed = subprocess.run(
             cmd,
             capture_output=True,

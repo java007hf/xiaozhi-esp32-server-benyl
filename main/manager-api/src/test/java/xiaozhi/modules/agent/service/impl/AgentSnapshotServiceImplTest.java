@@ -62,6 +62,8 @@ import xiaozhi.modules.agent.service.AgentContextProviderService;
 import xiaozhi.modules.agent.service.AgentSnapshotService;
 import xiaozhi.modules.agent.service.AgentTagService;
 import xiaozhi.modules.agent.service.AgentTemplateService;
+import xiaozhi.modules.agent.service.AgentSkillService;
+import xiaozhi.modules.agent.service.AgentMcpServerService;
 import xiaozhi.modules.agent.vo.AgentSnapshotVO;
 import xiaozhi.modules.agent.vo.AgentInfoVO;
 import xiaozhi.modules.correctword.service.CorrectWordFileService;
@@ -69,6 +71,9 @@ import xiaozhi.modules.model.service.ModelProviderService;
 import xiaozhi.modules.timbre.service.TimbreService;
 
 class AgentSnapshotServiceImplTest {
+
+    private final AgentSkillService agentSkillService = mock(AgentSkillService.class);
+    private final AgentMcpServerService agentMcpServerService = mock(AgentMcpServerService.class);
 
     @Test
     @SuppressWarnings("unchecked")
@@ -1080,7 +1085,7 @@ class AgentSnapshotServiceImplTest {
         CorrectWordFileService correctWordFileService = mock(CorrectWordFileService.class);
         AgentSnapshotService snapshotService = mock(AgentSnapshotService.class);
         AgentServiceImpl service = new AgentServiceImpl(agentDao, null, null, null, null, null, null, null,
-                null, null, contextProviderService, null, correctWordFileService, snapshotService);
+                null, null, contextProviderService, null, correctWordFileService, snapshotService, agentSkillService, agentMcpServerService);
         ReflectionTestUtils.setField(service, "baseDao", agentDao);
 
         String agentId = "agent-id";
@@ -1114,7 +1119,7 @@ class AgentSnapshotServiceImplTest {
         CorrectWordFileService correctWordFileService = mock(CorrectWordFileService.class);
         AgentSnapshotService snapshotService = mock(AgentSnapshotService.class);
         AgentServiceImpl service = new AgentServiceImpl(agentDao, null, null, null, null, null, null, null,
-                null, null, contextProviderService, null, correctWordFileService, snapshotService);
+                null, null, contextProviderService, null, correctWordFileService, snapshotService, agentSkillService, agentMcpServerService);
         ReflectionTestUtils.setField(service, "baseDao", agentDao);
 
         String agentId = "agent-id";
@@ -1150,7 +1155,7 @@ class AgentSnapshotServiceImplTest {
         ModelProviderService providerService = mock(ModelProviderService.class);
         AgentSnapshotService snapshotService = mock(AgentSnapshotService.class);
         AgentServiceImpl service = new AgentServiceImpl(agentDao, null, timbreService, null, null, null,
-                pluginMappingService, null, templateService, providerService, null, null, null, snapshotService);
+                pluginMappingService, null, templateService, providerService, null, null, null, snapshotService, agentSkillService, agentMcpServerService);
         ReflectionTestUtils.setField(service, "baseDao", agentDao);
 
         AgentTemplateEntity template = new AgentTemplateEntity();

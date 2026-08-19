@@ -103,7 +103,55 @@ async def get_private_config_from_api(config, device_id, client_id):
     private_config = agent_result if not isinstance(agent_result, Exception) else {}
     if correct_words:
         private_config["correct_words"] = correct_words
+
+    # 角色级 skills / MCP 配置：优先使用 Java 返回体里的字段（Phase 1a 后续由
+    # manager 写入）；若返回体未携带，则尝试从专用接口拉取（接口尚未实现时忽略）。
+    extra = await _fetch_agent_extra("get_agent_skills", device_id, client_id, config)
+    if isinstance(extra, dict):
+        if extra.get("skills_definitions"):
+            private_config["skills_definitions"] = extra["skills_definitions"]
+        if extra.get("sandbox"):
+            private_config["sandbox"] = extra["sandbox"]
+
+    mcp_servers = private_config.get("mcp_servers")
+    if not mcp_servers:
+        mcp_servers = await _fetch_agent_extra(
+            "get_agent_mcp_servers", device_id, client_id, config
+        )
+    if mcp_servers:
+        private_config["mcp_servers"] = mcp_servers
+
     return private_config
+
+
+async def _fetch_agent_extra(func_name: str, device_id, client_id, config):
+    """Best-effort fetch of role-level skills/mcp from the manager.
+
+    The dedicated manager endpoints are introduced alongside this feature; until
+    they exist this simply returns ``None`` without raising, keeping the call
+    backward compatible.
+    """
+    try:
+        from config.manage_api_client import (  # noqa: WPS433
+            get_agent_skills,  # type: ignore
+            get_agent_mcp_servers,  # type: ignore
+        )
+    except ImportError:
+        return None
+
+    fetch = {"get_agent_skills": get_agent_skills, "get_agent_mcp_servers": get_agent_mcp_servers}.get(
+        func_name
+    )
+    if fetch is None:
+        return None
+
+    try:
+        result = await fetch(device_id, client_id, config)
+        if isinstance(result, Exception):
+            return None
+        return result
+    except Exception:
+        return None
 
 
 def ensure_directories(config):

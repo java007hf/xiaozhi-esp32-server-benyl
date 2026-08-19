@@ -100,6 +100,15 @@ public class AgentUpdateDTO implements Serializable {
     @Schema(description = "标签ID列表", nullable = true)
     private List<String> tagIds;
 
+    @Schema(description = "角色级技能配置", nullable = true)
+    private List<AgentSkillItem> skills;
+
+    @Schema(description = "角色级MCP服务配置", nullable = true)
+    private List<AgentMcpServerItem> mcpServers;
+
+    @Schema(description = "技能沙箱运行配置(JSON字符串)", nullable = true)
+    private String sandboxConfig;
+
     @Data
     @Schema(description = "插件函数信息")
     public static class FunctionInfo implements Serializable {
@@ -139,5 +148,71 @@ public class AgentUpdateDTO implements Serializable {
         }
 
         private static final long serialVersionUID = 1L;
+    }
+
+    @Data
+    @Schema(description = "角色级技能配置项")
+    public static class AgentSkillItem implements Serializable {
+        private static final long serialVersionUID = 1L;
+
+        @Schema(description = "主键(更新时必填)")
+        private String id;
+
+        @Schema(description = "技能名(对应SKILL.md frontmatter name)", example = "weather")
+        private String skillName;
+
+        @Schema(description = "技能描述", example = "查询天气")
+        private String description;
+
+        @Schema(description = "完整 SKILL.md(含YAML frontmatter)")
+        private String content;
+
+        @Schema(description = "绑定的函数名列表")
+        private List<String> functions;
+
+        @Schema(description = "相对路径->文件内容(in-memory技能用)")
+        private Map<String, String> files;
+
+        @Schema(description = "是否启用", example = "true")
+        private Boolean enabled;
+
+        @Schema(description = "排序", example = "0")
+        private Integer sort;
+    }
+
+    @Data
+    @Schema(description = "角色级MCP服务配置项")
+    public static class AgentMcpServerItem implements Serializable {
+        private static final long serialVersionUID = 1L;
+
+        @Schema(description = "主键(更新时必填)")
+        private String id;
+
+        @Schema(description = "MCP服务名", example = "filesystem")
+        private String serverName;
+
+        @Schema(description = "传输方式: stdio|sse|streamable-http", example = "stdio")
+        private String transport;
+
+        @Schema(description = "stdio启动命令", example = "npx")
+        private String command;
+
+        @Schema(description = "启动参数列表")
+        private List<String> args;
+
+        @Schema(description = "sse/streamable-http地址")
+        private String url;
+
+        @Schema(description = "环境变量")
+        private Map<String, String> env;
+
+        @Schema(description = "请求头")
+        private Map<String, String> headers;
+
+        @Schema(description = "是否启用", example = "true")
+        private Boolean enabled;
+
+        @Schema(description = "排序", example = "0")
+        private Integer sort;
     }
 }

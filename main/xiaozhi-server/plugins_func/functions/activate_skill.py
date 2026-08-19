@@ -52,7 +52,7 @@ def activate_skill(
 ):
     """Load full instructions for one enabled skill."""
     try:
-        loader = SkillLoader(conn.config)
+        loader = SkillLoader(conn.config, conn.config.get("skills_definitions"))
         skill = loader.get_skill(skill_name)
         if skill is None:
             available = ", ".join(loader.get_enabled_skill_names()) or "(none)"
@@ -65,12 +65,13 @@ def activate_skill(
         resources = loader.list_skill_resources(skill)
         instructions = _truncate(skill.prompt or "", max_len)
 
+        skill_path = skill.path or "(in-memory)"
         result = "\n".join(
             [
                 f"# activated skill: {skill.name}",
                 "",
                 f"description: {skill.description}",
-                f"path: {skill.path}",
+                f"path: {skill_path}",
                 "",
                 "available_resources:",
                 json.dumps(resources, ensure_ascii=False, indent=2),

@@ -77,7 +77,7 @@ class ServerMCPManager:
 
     async def initialize_servers(self) -> None:
         """初始化所有MCP服务"""
-        config = self.load_config()
+        config = self.get_merged_servers()
         tasks = []
         for name, srv_config in config.items():
             if not srv_config.get("command") and not srv_config.get("url"):
@@ -90,6 +90,24 @@ class ServerMCPManager:
         
         if tasks:
             await asyncio.gather(*tasks)
+
+    def get_merged_servers(self) -> Dict[str, Any]:
+        """合并文件配置与角色级(内存) MCP 服务配置。
+
+        文件配置(`data/.mcp_server_settings.json`)为基础，角色级 ``mcp_servers``
+        (来自管理台，存放于 ``conn.config``) 覆盖同名的服务。
+        """
+        config = self.load_config()
+        mem_cfg = {}
+        conn_config = getattr(self.conn, "config", None) or {}
+        raw = conn_config.get("mcp_servers")
+        if isinstance(raw, dict):
+            mem_cfg = raw
+        if not mem_cfg:
+            return config
+        merged = dict(config)
+        merged.update(mem_cfg)
+        return merged
 
         # 输出当前支持的服务端MCP工具列表
         if hasattr(self.conn, "func_handler") and self.conn.func_handler:

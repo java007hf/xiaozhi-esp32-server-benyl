@@ -5,7 +5,9 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 import xiaozhi.modules.agent.dto.ContextProviderDTO;
 import xiaozhi.modules.agent.entity.AgentEntity;
+import xiaozhi.modules.agent.entity.AgentMcpServerEntity;
 import xiaozhi.modules.agent.entity.AgentPluginMapping;
+import xiaozhi.modules.agent.entity.AgentSkillEntity;
 
 import java.util.List;
 
@@ -25,6 +27,12 @@ public class AgentInfoVO extends AgentEntity
 
     @Schema(description = "替换词文件ID列表")
     private List<String> correctWordFileIds;
+
+    @Schema(description = "角色级技能配置")
+    private List<AgentSkillEntity> skills;
+
+    @Schema(description = "角色级MCP服务配置")
+    private List<AgentMcpServerEntity> mcpServers;
 
     @Schema(description = "当前配置版本号")
     private Integer currentVersionNo;
