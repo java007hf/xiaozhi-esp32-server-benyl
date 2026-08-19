@@ -17,11 +17,11 @@ import lombok.AllArgsConstructor;
 import xiaozhi.common.exception.RenException;
 import xiaozhi.common.service.impl.BaseServiceImpl;
 import xiaozhi.common.utils.JsonUtils;
+import xiaozhi.modules.agent.dao.AgentDao;
 import xiaozhi.modules.agent.dao.AgentSkillDao;
 import xiaozhi.modules.agent.dto.AgentUpdateDTO.AgentSkillItem;
 import xiaozhi.modules.agent.entity.AgentEntity;
 import xiaozhi.modules.agent.entity.AgentSkillEntity;
-import xiaozhi.modules.agent.service.AgentService;
 import xiaozhi.modules.agent.service.AgentSkillService;
 import xiaozhi.modules.device.service.DeviceService;
 
@@ -30,7 +30,7 @@ import xiaozhi.modules.device.service.DeviceService;
 public class AgentSkillServiceImpl extends BaseServiceImpl<AgentSkillDao, AgentSkillEntity> implements AgentSkillService {
 
     private final DeviceService deviceService;
-    private final AgentService agentService;
+    private final AgentDao agentDao;
 
     @Override
     public List<AgentSkillEntity> getByAgentId(String agentId) {
@@ -117,7 +117,7 @@ public class AgentSkillServiceImpl extends BaseServiceImpl<AgentSkillDao, AgentS
         }
         result.put("skills_definitions", definitions);
 
-        AgentEntity agent = agentService.getAgentById(agentId);
+        AgentEntity agent = agentDao.selectById(agentId);
         if (agent != null && StringUtils.isNotBlank(agent.getSandboxConfig())) {
             try {
                 result.put("sandbox", JsonUtils.parseMap(agent.getSandboxConfig()));

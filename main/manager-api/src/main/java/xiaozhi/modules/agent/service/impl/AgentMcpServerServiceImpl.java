@@ -21,7 +21,6 @@ import xiaozhi.modules.agent.dao.AgentMcpServerDao;
 import xiaozhi.modules.agent.dto.AgentUpdateDTO.AgentMcpServerItem;
 import xiaozhi.modules.agent.entity.AgentMcpServerEntity;
 import xiaozhi.modules.agent.service.AgentMcpServerService;
-import xiaozhi.modules.agent.service.AgentService;
 import xiaozhi.modules.device.service.DeviceService;
 
 @Service
@@ -29,7 +28,6 @@ import xiaozhi.modules.device.service.DeviceService;
 public class AgentMcpServerServiceImpl extends BaseServiceImpl<AgentMcpServerDao, AgentMcpServerEntity> implements AgentMcpServerService {
 
     private final DeviceService deviceService;
-    private final AgentService agentService;
 
     @Override
     public List<AgentMcpServerEntity> getByAgentId(String agentId) {
