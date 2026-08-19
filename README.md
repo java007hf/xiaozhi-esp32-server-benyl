@@ -424,6 +424,78 @@ Websocket接口地址: wss://2662r3426b.vicp.fun/xiaozhi/v1/
 
 ---
 
+## cruiseCar 智能小车集成 🚗
+
+本项目支持与 [cruiseCar 智能遥控车](https://github.com/) 项目集成，让每辆小车成为一个独立的 xiaozhi 设备，拥有独立的 AI 对话、记忆和语音能力。
+
+### 架构概览
+
+```
+Android App ←TCP/HTTP→ cruiseCar Server ←WebSocket→ xiaozhi Server
+   (车的UI)               (桥梁，每辆车一个WS连接)      (AI大脑)
+                               │
+                               └── MCP Server（暴露车辆能力为工具）
+                                    ↑
+                              xiaozhi MCP Client 调用
+```
+
+- **Bridge 模式**：cruiseCar Server 为每辆在线车辆维护一个到 xiaozhi 的 WebSocket 连接
+- **1:1 映射**：每辆车 = 1个 xiaozhi 设备 = 1个 agent = 独立记忆
+- **MCP 控车**：cruiseCar 暴露 MCP Server，xiaozhi 通过 MCP Client 调用控车工具，零代码改动
+- **设备标识**：使用 cruiseCar 的 `device_id` 作为 xiaozhi 的 `device-id`
+
+### Agent 模板与实例
+
+- **Agent 模板**（少量）：定义 prompt 人设 + 可选技能列表，如"活泼助手"、"赛车教练"
+- **Agent 实例**（每车一个）：继承某个模板，拥有独立记忆、独立对话
+- 用户在 cruiseCar App 中选择内置模板或自定义创建新模板
+- 切换模板 = 换人设，记忆保留
+
+### MCP 工具
+
+cruiseCar MCP Server 暴露以下工具供 xiaozhi LLM 调用：
+
+| 工具名 | 参数 | 说明 |
+|--------|------|------|
+| `car_move` | direction, speed | 控制车辆移动（forward/backward/left/right/stop） |
+| `car_set_mode` | mode | 切换驾驶模式（manual/smart_follow/patrol） |
+| `car_set_servo` | angle | 调整摄像头角度（130-180度） |
+| `car_connect` | 无 | 连接 ESP32 蓝牙 |
+| `car_get_status` | 无 | 查询车辆状态 |
+
+### 配置方式
+
+1. 在 cruiseCar Server 设置环境变量：
+   ```bash
+   CRUISECAR_XIAOZHI_WS_URL=ws://xiaozhi-host:8000
+   CRUISECAR_XIAOZHI_MCP_PORT=8090
+   ```
+
+2. 在智控台为车辆创建 agent，配置 `mcp_servers` 指向 cruiseCar MCP 地址：
+   ```json
+   {
+     "cruiseCar": {
+       "url": "http://cruisecar-host:8090/mcp",
+       "transport": "streamable-http"
+     }
+   }
+   ```
+
+3. 通过 cruiseCar API 连接 bridge：
+   ```bash
+   POST /api/bridge/connect
+   {"device_id": "your-car-id"}
+   ```
+
+### 安全设计
+
+- Bridge 连接 xiaozhi 时使用 HMAC token 认证（如 xiaozhi 开启 auth）
+- MCP 端点支持 Bearer Token 认证（`CRUISECAR_XIAOZHI_MCP_TOKEN`）
+- 公网部署建议通过 nginx + TLS 反向代理
+- `car_move` 工具内置超时自动停车机制
+
+---
+
 ## 鸣谢 🙏
 
 | Logo | 项目/公司 | 说明 |
