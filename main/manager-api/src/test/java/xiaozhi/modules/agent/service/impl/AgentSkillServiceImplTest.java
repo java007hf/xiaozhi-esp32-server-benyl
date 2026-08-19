@@ -14,29 +14,34 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.io.IOException;
 import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import xiaozhi.modules.agent.dao.AgentDao;
 import xiaozhi.modules.agent.dao.AgentSkillDao;
 import xiaozhi.modules.agent.dto.AgentUpdateDTO.AgentSkillItem;
 import xiaozhi.modules.agent.entity.AgentEntity;
 import xiaozhi.modules.agent.entity.AgentSkillEntity;
-import xiaozhi.modules.agent.vo.AgentInfoVO;
-import xiaozhi.modules.agent.service.AgentService;
 import xiaozhi.modules.device.entity.DeviceEntity;
 import xiaozhi.modules.device.service.DeviceService;
 
 @SuppressWarnings({"unchecked", "rawtypes"})
 class AgentSkillServiceImplTest {
 
-    private AgentSkillServiceImpl build(AgentSkillDao dao, DeviceService deviceService, AgentService agentService) {
-        AgentSkillServiceImpl service = new AgentSkillServiceImpl(deviceService, agentService);
+    private AgentSkillServiceImpl build(AgentSkillDao dao, DeviceService deviceService, AgentDao agentDao) {
+        AgentSkillServiceImpl service = new AgentSkillServiceImpl(deviceService, agentDao, "/uploaded_skills");
         ReflectionTestUtils.setField(service, "baseDao", dao);
         return service;
     }
@@ -54,7 +59,7 @@ class AgentSkillServiceImplTest {
         AgentSkillDao dao = mock(AgentSkillDao.class);
         AgentSkillEntity e = new AgentSkillEntity();
         when(dao.selectList(any())).thenReturn(List.of(e));
-        AgentSkillServiceImpl service = build(dao, mock(DeviceService.class), mock(AgentService.class));
+        AgentSkillServiceImpl service = build(dao, mock(DeviceService.class), mock(AgentDao.class));
 
         List<AgentSkillEntity> result = service.getByAgentId("a1");
 
@@ -65,7 +70,7 @@ class AgentSkillServiceImplTest {
     @Test
     void saveOrUpdate_insertsNewSkillsAndSerializesFieldsToJson() {
         AgentSkillDao dao = mock(AgentSkillDao.class);
-        AgentSkillServiceImpl real = build(dao, mock(DeviceService.class), mock(AgentService.class));
+        AgentSkillServiceImpl real = build(dao, mock(DeviceService.class), mock(AgentDao.class));
         AgentSkillServiceImpl service = spyService(real);
         when(dao.selectList(any())).thenReturn(List.of());
 
@@ -98,7 +103,7 @@ class AgentSkillServiceImplTest {
     @Test
     void saveOrUpdate_updatesExistingAndDeletesMissing() {
         AgentSkillDao dao = mock(AgentSkillDao.class);
-        AgentSkillServiceImpl real = build(dao, mock(DeviceService.class), mock(AgentService.class));
+        AgentSkillServiceImpl real = build(dao, mock(DeviceService.class), mock(AgentDao.class));
         AgentSkillServiceImpl service = spyService(real);
 
         AgentSkillEntity existing1 = new AgentSkillEntity();
@@ -143,7 +148,7 @@ class AgentSkillServiceImplTest {
     @Test
     void saveOrUpdate_nullItemsReturnsEarly() {
         AgentSkillDao dao = mock(AgentSkillDao.class);
-        AgentSkillServiceImpl real = build(dao, mock(DeviceService.class), mock(AgentService.class));
+        AgentSkillServiceImpl real = build(dao, mock(DeviceService.class), mock(AgentDao.class));
         AgentSkillServiceImpl service = spyService(real);
 
         service.saveOrUpdateByAgentId("a1", null, 7L);
@@ -153,10 +158,10 @@ class AgentSkillServiceImplTest {
     }
 
     @Test
-    void getSkillsDefinitionsForDevice_returnsEnabledDefinitionsAndSandbox() {
+    void getSkillsDefinitionsForDevice_returnsEnabledDefinitionsAndSandboxAndAgentId() {
         AgentSkillDao dao = mock(AgentSkillDao.class);
         DeviceService deviceService = mock(DeviceService.class);
-        AgentService agentService = mock(AgentService.class);
+        AgentDao agentDao = mock(AgentDao.class);
 
         DeviceEntity device = new DeviceEntity();
         device.setAgentId("a1");
@@ -172,11 +177,11 @@ class AgentSkillServiceImplTest {
         enabled.setEnabled(1);
         when(dao.selectList(any())).thenReturn(List.of(enabled));
 
-        AgentInfoVO agent = new AgentInfoVO();
+        AgentEntity agent = new AgentEntity();
         agent.setSandboxConfig("{\"enabled\":true,\"network\":false,\"timeout\":30}");
-        when(agentService.getAgentById("a1")).thenReturn(agent);
+        when(agentDao.selectById("a1")).thenReturn(agent);
 
-        AgentSkillServiceImpl service = build(dao, deviceService, agentService);
+        AgentSkillServiceImpl service = build(dao, deviceService, agentDao);
         Map<String, Object> result = service.getSkillsDefinitionsForDevice("AA:BB", "cid");
 
         List<?> defs = (List<?>) result.get("skills_definitions");
@@ -186,6 +191,8 @@ class AgentSkillServiceImplTest {
         assertEquals(List.of("shell_command"), def.get("functions"));
         assertEquals(Map.of("a/b", "x"), def.get("files"));
         assertTrue(result.containsKey("sandbox"));
+        // 供 Python 端按 agent 维度扫描上传的技能目录
+        assertEquals("a1", result.get("agent_id"));
     }
 
     @Test
@@ -193,7 +200,7 @@ class AgentSkillServiceImplTest {
         AgentSkillDao dao = mock(AgentSkillDao.class);
         DeviceService deviceService = mock(DeviceService.class);
         when(deviceService.getDeviceByMacAddress("ZZ")).thenReturn(null);
-        AgentSkillServiceImpl service = build(dao, deviceService, mock(AgentService.class));
+        AgentSkillServiceImpl service = build(dao, deviceService, mock(AgentDao.class));
 
         Map<String, Object> result = service.getSkillsDefinitionsForDevice("ZZ", "cid");
 
@@ -203,12 +210,83 @@ class AgentSkillServiceImplTest {
     }
 
     @Test
+    void uploadSkillFolder_writesFilesAndCreatesDbRow() throws IOException {
+        AgentSkillDao dao = mock(AgentSkillDao.class);
+        Path base = Files.createTempDirectory("skills-upload-test");
+        try {
+            AgentSkillServiceImpl real = build(dao, mock(DeviceService.class), mock(AgentDao.class));
+            ReflectionTestUtils.setField(real, "skillsUploadBase", base.toString());
+            AgentSkillServiceImpl service = spyService(real);
+            when(dao.selectList(any())).thenReturn(List.of());
+            when(dao.selectOne(any())).thenReturn(null);
+
+            MockMultipartFile file = new MockMultipartFile(
+                    "files",
+                    "my-skill/SKILL.md",
+                    "text/markdown",
+                    "---\nname: myskill\ndescription: demo\n---\nhello".getBytes(StandardCharsets.UTF_8));
+            service.uploadSkillFolder("a1", 7L, List.of(file));
+
+            Path written = base.resolve("a1").resolve("my-skill").resolve("SKILL.md");
+            assertTrue(Files.exists(written));
+            ArgumentCaptor<List<AgentSkillEntity>> cap = ArgumentCaptor.forClass(List.class);
+            verify(service).insertBatch(cap.capture(), anyInt());
+            assertEquals("my-skill", cap.getValue().get(0).getSkillName());
+        } finally {
+            deleteRecursively(base);
+        }
+    }
+
+    @Test
+    void deleteSkillById_removesDbRowAndDiskDir() throws IOException {
+        AgentSkillDao dao = mock(AgentSkillDao.class);
+        Path base = Files.createTempDirectory("skills-del-test");
+        try {
+            AgentSkillServiceImpl real = build(dao, mock(DeviceService.class), mock(AgentDao.class));
+            ReflectionTestUtils.setField(real, "skillsUploadBase", base.toString());
+            AgentSkillServiceImpl service = spyService(real);
+
+            AgentSkillEntity existing = new AgentSkillEntity();
+            existing.setId("s1");
+            existing.setAgentId("a1");
+            existing.setSkillName("my-skill");
+            when(dao.selectById("s1")).thenReturn(existing);
+
+            Path dir = base.resolve("a1").resolve("my-skill");
+            Files.createDirectories(dir);
+            Files.write(dir.resolve("SKILL.md"), "x".getBytes(StandardCharsets.UTF_8));
+
+            service.deleteSkillById("a1", "s1");
+
+            verify(dao).deleteById("s1");
+            assertFalse(Files.exists(dir));
+        } finally {
+            deleteRecursively(base);
+        }
+    }
+
+    @Test
     void deleteByAgentId_deletesByAgentId() {
         AgentSkillDao dao = mock(AgentSkillDao.class);
-        AgentSkillServiceImpl service = build(dao, mock(DeviceService.class), mock(AgentService.class));
+        AgentSkillServiceImpl service = build(dao, mock(DeviceService.class), mock(AgentDao.class));
 
         service.deleteByAgentId("a1");
 
         verify(dao).delete(any());
+    }
+
+    private void deleteRecursively(Path dir) throws IOException {
+        if (!Files.exists(dir)) {
+            return;
+        }
+        try (var stream = Files.walk(dir)) {
+            stream.sorted(Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (IOException ignored) {
+                    // ignore
+                }
+            });
+        }
     }
 }

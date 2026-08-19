@@ -317,62 +317,6 @@
                             :value="item.value"
                           />
                         </el-select>
-                        <div v-if="showFunctionIcons(model.type)" class="function-icons">
-                          <el-tooltip
-                            v-for="func in currentFunctions"
-                            :key="func.name"
-                            effect="light"
-                            placement="top"
-                          >
-                            <div slot="content">
-                              <div><strong>{{ $t("roleConfig.functionName") }}:</strong> {{ func.name }}</div>
-                            </div>
-                            <div class="icon-dot">
-                              {{ getFunctionDisplayChar(func.name) }}
-                            </div>
-                          </el-tooltip>
-                          <el-button
-                            class="edit-function-btn"
-                            @click="openFunctionDialog"
-                            :class="{ 'active-btn': showFunctionDialog }"
-                          >
-                            {{ $t("roleConfig.editFunctions") }}
-                          </el-button>
-                          <el-button
-                            class="edit-function-btn"
-                            @click="openSkillDialog"
-                            :class="{ 'active-btn': showSkillDialog }"
-                          >
-                            {{ $t("roleConfig.editSkills") }}
-                          </el-button>
-                          <el-button
-                            class="edit-function-btn"
-                            @click="openMcpDialog"
-                            :class="{ 'active-btn': showMcpDialog }"
-                          >
-                            {{ $t("roleConfig.editMcpServers") }}
-                          </el-button>
-                          <span class="sandbox-inline">
-                            <el-tooltip :content="$t('roleConfig.sandboxTip')" placement="top">
-                              <el-switch
-                                v-model="sandboxEnabled"
-                                :active-text="$t('roleConfig.sandbox')"
-                                @change="onSandboxChange"
-                              />
-                            </el-tooltip>
-                            <template v-if="sandboxEnabled">
-                              <el-checkbox v-model="sandboxNetwork" class="sandbox-opt">{{ $t("roleConfig.sandboxNetwork") }}</el-checkbox>
-                              <el-input-number
-                                v-model="sandboxTimeout"
-                                :min="1"
-                                :max="300"
-                                size="mini"
-                                class="sandbox-timeout"
-                                :placeholder="$t('roleConfig.sandboxTimeout')"
-                              />
-                            </template>
-                          </span>
-                        </div>
                         <div
                           v-if="
                             model.type === 'Memory' &&
@@ -483,6 +427,86 @@
                 </div>
               </div>
             </el-form>
+
+            <!-- 扩展能力：技能 / MCP / 沙箱 -->
+            <div class="extended-section">
+              <h3 class="section-title">{{ $t("roleConfig.extendedTitle") }}</h3>
+
+              <!-- 技能上传与列表 -->
+              <div class="ext-block">
+                <div class="ext-block-header">
+                  <span class="ext-label">{{ $t("roleConfig.skills") }}</span>
+                  <label class="el-button edit-function-btn skill-upload-btn">
+                    <input
+                      type="file"
+                      webkitdirectory
+                      directory
+                      multiple
+                      class="skill-folder-input"
+                      @change="handleSkillFolderUpload"
+                      :disabled="agentReloading"
+                    />
+                    {{ $t("roleConfig.uploadSkillFolder") }}
+                  </label>
+                </div>
+                <div class="ext-tip">{{ $t("roleConfig.skillsUploadTip") }}</div>
+                <ul class="skill-list" v-if="skillList.length">
+                  <li v-for="skill in skillList" :key="skill.id" class="skill-item">
+                    <div class="skill-info">
+                      <span class="skill-name">{{ skill.skillName }}</span>
+                      <span class="skill-desc" v-if="skill.description">{{ skill.description }}</span>
+                    </div>
+                    <el-button
+                      type="text"
+                      class="skill-del"
+                      @click="handleDeleteSkill(skill)"
+                    >{{ $t("roleConfig.delete") }}</el-button>
+                  </li>
+                </ul>
+                <div class="ext-empty" v-else>{{ $t("roleConfig.skillsEmpty") }}</div>
+              </div>
+
+              <!-- MCP 配置(JSON 编辑器) -->
+              <div class="ext-block">
+                <div class="ext-block-header">
+                  <span class="ext-label">{{ $t("roleConfig.mcpConfig") }}</span>
+                  <el-button
+                    class="edit-function-btn"
+                    :loading="mcpConfigSaving"
+                    @click="saveMcpConfig"
+                  >{{ $t("roleConfig.mcpConfigSave") }}</el-button>
+                </div>
+                <div class="ext-tip">{{ $t("roleConfig.mcpConfigTip") }}</div>
+                <el-input
+                  type="textarea"
+                  :rows="10"
+                  resize="none"
+                  class="mcp-editor"
+                  v-model="mcpConfigText"
+                  :placeholder="$t('roleConfig.mcpConfigPlaceholder')"
+                />
+              </div>
+
+              <!-- 技能沙箱 -->
+              <div class="ext-block">
+                <div class="ext-block-header">
+                  <span class="ext-label">{{ $t("roleConfig.sandbox") }}</span>
+                  <el-switch v-model="sandboxEnabled" :active-text="$t('roleConfig.sandboxOn')" />
+                </div>
+                <template v-if="sandboxEnabled">
+                  <el-checkbox v-model="sandboxNetwork" class="sandbox-opt">{{ $t("roleConfig.sandboxNetwork") }}</el-checkbox>
+                  <el-input-number
+                    v-model="sandboxTimeout"
+                    :min="1"
+                    :max="300"
+                    size="mini"
+                    class="sandbox-timeout"
+                    :placeholder="$t('roleConfig.sandboxTimeout')"
+                  />
+                </template>
+                <div class="ext-tip">{{ $t("roleConfig.sandboxTip") }}</div>
+              </div>
+            </div>
           </el-card>
         </div>
       </div>
@@ -494,20 +518,6 @@
       :agent-id="$route.query.agentId"
       @update-functions="handleUpdateFunctions"
       @dialog-closed="handleDialogClosed"
-    />
-    <skill-dialog
-      v-model="showSkillDialog"
-      :skills="currentSkills"
-      :agent-id="$route.query.agentId"
-      @update-skills="handleUpdateSkills"
-      @dialog-closed="handleSkillDialogClosed"
-    />
-    <mcp-server-dialog
-      v-model="showMcpDialog"
-      :mcp-servers="currentMcpServers"
-      :agent-id="$route.query.agentId"
-      @update-mcp-servers="handleUpdateMcpServers"
-      @dialog-closed="handleMcpDialogClosed"
     />
     <context-provider-dialog
       :visible.sync="showContextProviderDialog"
@@ -538,8 +548,6 @@ import Api from "@/apis/api";
 import { getServiceUrl } from "@/apis/api";
 import RequestService from "@/apis/httpRequest";
 import FunctionDialog from "@/components/FunctionDialog.vue";
-import SkillDialog from "@/components/SkillDialog.vue";
-import McpServerDialog from "@/components/McpServerDialog.vue";
 import ContextProviderDialog from "@/components/ContextProviderDialog.vue";
 import TtsAdvancedSettings from "@/components/TtsAdvancedSettings.vue";
 import AgentSnapshotDialog from "@/components/AgentSnapshotDialog.vue";
@@ -550,7 +558,7 @@ import VersionFooter from "@/components/VersionFooter.vue";
 
 export default {
   name: "RoleConfigPage",
-  components: { HeaderBar, FunctionDialog, SkillDialog, McpServerDialog, ContextProviderDialog, TtsAdvancedSettings, AgentSnapshotDialog, VersionFooter },
+  components: { HeaderBar, FunctionDialog, ContextProviderDialog, TtsAdvancedSettings, AgentSnapshotDialog, VersionFooter },
   data() {
     return {
       showContextProviderDialog: false,
@@ -607,13 +615,15 @@ export default {
       currentFunctions: [],
       currentContextProviders: [],
       allFunctions: [],
-      showSkillDialog: false,
-      currentSkills: [],
-      showMcpDialog: false,
-      currentMcpServers: [],
       sandboxEnabled: false,
       sandboxNetwork: false,
       sandboxTimeout: 30,
+      // 上传的技能列表(文件夹上传)
+      skillList: [],
+      skillUploading: false,
+      // MCP 配置(JSON 编辑器)
+      mcpConfigText: "{\n  \"mcpServers\": {}\n}",
+      mcpConfigSaving: false,
       originalFunctions: [],
       playingVoice: false,
       isPaused: false,
@@ -711,8 +721,6 @@ export default {
         }),
         contextProviders: this.currentContextProviders,
         correctWordFileIds: this.checkedReplacementWordIds,
-        skills: this.currentSkills,
-        mcpServers: this.currentMcpServers,
         sandboxConfig: JSON.stringify(this.buildSandboxConfig()),
       };
       const tagNames = this.dynamicTags.map(tag => tag.tagName);
@@ -796,7 +804,9 @@ export default {
       const results = await Promise.all([
         this.fetchAgentConfig(agentId, { showError: false }),
         this.getAgentTags(agentId, { showError: false }),
-        this.fetchCurrentVersion(agentId, { showError: false })
+        this.fetchCurrentVersion(agentId, { showError: false }),
+        this.fetchAgentSkills(agentId, { showError: false }),
+        this.fetchAgentMcpConfig(agentId, { showError: false })
       ]);
       if (requestSeq !== this.agentReloadSeq) {
         return false;
@@ -1073,8 +1083,6 @@ export default {
             this.checkedReplacementWordIds = agentData.correctWordFileIds || [];
             this.currentContextProviders = agentData.contextProviders || [];
             this.currentFunctions = this.buildCurrentFunctions(agentData.functions || []);
-            this.currentSkills = this.normalizeSkills(agentData.skills || []);
-            this.currentMcpServers = this.normalizeMcpServers(agentData.mcpServers || []);
             this.initSandboxConfig(agentData.sandboxConfig);
             this.originalFunctions = JSON.parse(JSON.stringify(this.currentFunctions));
             this.agentFunctionsLoaded = true;
@@ -2002,29 +2010,127 @@ export default {
         sort: typeof item.sort === 'number' ? item.sort : 0
       }));
     },
-    openSkillDialog() {
-      if (this.agentReloading || !this.agentConfigLoaded) {
+    // ---------- 上传的技能(文件夹) ----------
+    fetchAgentSkills(agentId, options = {}) {
+      if (!agentId) {
+        this.skillList = [];
+        return Promise.resolve(true);
+      }
+      return new Promise((resolve) => {
+        const handleFailure = (error) => {
+          if (options.showError !== false) {
+            this.$message.error(error?.data?.msg || i18n.t("roleConfig.fetchSkillsFailed"));
+          }
+          resolve(false);
+        };
+        Api.agent.getAgentSkills(agentId, ({ data }) => {
+          if (data?.code === 0) {
+            this.skillList = Array.isArray(data.data) ? data.data : [];
+            resolve(true);
+          } else {
+            handleFailure(data);
+          }
+        }, handleFailure);
+      });
+    },
+    handleSkillFolderUpload(event) {
+      const files = event.target.files;
+      const inputEl = event.target;
+      if (!files || !files.length) {
         return;
       }
-      this.showSkillDialog = true;
-    },
-    openMcpDialog() {
-      if (this.agentReloading || !this.agentConfigLoaded) {
+      const agentId = this.$route.query.agentId;
+      if (!agentId) {
         return;
       }
-      this.showMcpDialog = true;
+      this.skillUploading = true;
+      Api.agent.uploadAgentSkillFolder(agentId, files, ({ data }) => {
+        this.skillUploading = false;
+        // 重置 input 以便重复上传同名文件夹
+        inputEl.value = "";
+        if (data?.code === 0) {
+          this.$message.success(i18n.t("roleConfig.uploadSkillSuccess"));
+          this.fetchAgentSkills(agentId);
+        } else {
+          this.$message.error(data?.msg || i18n.t("roleConfig.uploadSkillFailed"));
+        }
+      });
     },
-    handleUpdateSkills(skills) {
-      this.currentSkills = skills;
+    handleDeleteSkill(skill) {
+      const agentId = this.$route.query.agentId;
+      if (!agentId || !skill.id) {
+        return;
+      }
+      this.$confirm(
+        i18n.t("roleConfig.skillsDeleteConfirm", { name: skill.skillName }),
+        i18n.t("message.info"),
+        {
+          confirmButtonText: i18n.t("button.ok"),
+          cancelButtonText: i18n.t("button.cancel"),
+          type: "warning",
+        }
+      )
+        .then(() => {
+          Api.agent.deleteAgentSkill(agentId, skill.id, ({ data }) => {
+            if (data?.code === 0) {
+              this.$message.success(i18n.t("roleConfig.deleteSuccess"));
+              this.fetchAgentSkills(agentId);
+            } else {
+              this.$message.error(data?.msg || i18n.t("roleConfig.deleteFailed"));
+            }
+          });
+        })
+        .catch(() => {});
     },
-    handleUpdateMcpServers(servers) {
-      this.currentMcpServers = servers;
+    // ---------- MCP 配置(JSON 编辑器) ----------
+    fetchAgentMcpConfig(agentId, options = {}) {
+      if (!agentId) {
+        this.mcpConfigText = "{\n  \"mcpServers\": {}\n}";
+        return Promise.resolve(true);
+      }
+      return new Promise((resolve) => {
+        const handleFailure = (error) => {
+          if (options.showError !== false) {
+            this.$message.error(error?.data?.msg || i18n.t("roleConfig.fetchMcpFailed"));
+          }
+          resolve(false);
+        };
+        Api.agent.getAgentMcpConfig(agentId, ({ data }) => {
+          if (data?.code === 0) {
+            const cfg = data.data && typeof data.data === "object" ? data.data : { mcpServers: {} };
+            this.mcpConfigText = JSON.stringify(cfg, null, 2);
+            resolve(true);
+          } else {
+            handleFailure(data);
+          }
+        }, handleFailure);
+      });
     },
-    handleSkillDialogClosed() {
-      this.showSkillDialog = false;
-    },
-    handleMcpDialogClosed() {
-      this.showMcpDialog = false;
+    saveMcpConfig() {
+      const agentId = this.$route.query.agentId;
+      if (!agentId) {
+        return;
+      }
+      let parsed;
+      try {
+        parsed = JSON.parse(this.mcpConfigText);
+      } catch (error) {
+        this.$message.error(i18n.t("roleConfig.mcpConfigInvalid"));
+        return;
+      }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) || typeof parsed.mcpServers !== "object" || parsed.mcpServers === null || Array.isArray(parsed.mcpServers)) {
+        this.$message.error(i18n.t("roleConfig.mcpConfigInvalid"));
+        return;
+      }
+      this.mcpConfigSaving = true;
+      Api.agent.saveAgentMcpConfig(agentId, parsed, ({ data }) => {
+        this.mcpConfigSaving = false;
+        if (data?.code === 0) {
+          this.$message.success(i18n.t("roleConfig.mcpConfigSaveSuccess"));
+        } else {
+          this.$message.error(data?.msg || i18n.t("roleConfig.mcpConfigSaveFailed"));
+        }
+      });
     },
     // ---------- 技能沙箱 (Sandbox) ----------
     initSandboxConfig(value) {
@@ -2569,6 +2675,125 @@ export default {
   &::v-deep(.el-input__inner) {
     width: 90px !important;
   }
+}
+
+.extended-section {
+  padding: 8px 0 4px;
+  margin-top: 8px;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #3d4566;
+  margin: 0 0 12px;
+}
+
+.ext-block {
+  background: #f7f9ff;
+  border: 1px solid #e8f0ff;
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.ext-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ext-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: #3d4566;
+}
+
+.ext-tip {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.6;
+  margin: 8px 0 10px;
+  word-break: break-word;
+}
+
+.skill-upload-btn {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.skill-folder-input {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.skill-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.skill-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #e8f0ff;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.skill-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.skill-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #3d4566;
+}
+
+.skill-desc {
+  font-size: 12px;
+  color: #909399;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-del {
+  color: #f56c6c;
+  flex-shrink: 0;
+}
+
+.ext-empty {
+  font-size: 12px;
+  color: #b0b6c4;
+  padding: 6px 2px;
+}
+
+.mcp-editor {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 13px;
+}
+
+.sandbox-opt {
+  margin-right: 12px;
+}
+
+.sandbox-timeout {
+  margin-left: 4px;
 }
 
 </style>

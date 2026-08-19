@@ -640,4 +640,71 @@ export default {
                 });
             }).send();
     },
+
+    // 上传智能体角色级技能文件夹(含 py 脚本)
+    uploadAgentSkillFolder(agentId, files, callback) {
+        const formData = new FormData();
+        Array.from(files).forEach((file) => {
+            formData.append('files', file);
+        });
+        RequestService.sendRequest()
+            .url(`${getServiceUrl()}/agent/${agentId}/skills/upload`)
+            .method('POST')
+            .data(formData)
+            .success((res) => {
+                RequestService.clearRequestTime();
+                callback(res);
+            })
+            .networkFail(() => {
+                RequestService.reAjaxFun(() => {
+                    this.uploadAgentSkillFolder(agentId, files, callback);
+                });
+            }).send();
+    },
+    // 删除智能体角色级技能
+    deleteAgentSkill(agentId, skillId, callback) {
+        RequestService.sendRequest()
+            .url(`${getServiceUrl()}/agent/${agentId}/skills/${skillId}`)
+            .method('DELETE')
+            .success((res) => {
+                RequestService.clearRequestTime();
+                callback(res);
+            })
+            .networkFail(() => {
+                RequestService.reAjaxFun(() => {
+                    this.deleteAgentSkill(agentId, skillId, callback);
+                });
+            }).send();
+    },
+    // 获取智能体角色级MCP配置(JSON, 标准 mcpServers)
+    getAgentMcpConfig(agentId, callback) {
+        RequestService.sendRequest()
+            .url(`${getServiceUrl()}/agent/${agentId}/mcp-config`)
+            .method('GET')
+            .success((res) => {
+                RequestService.clearRequestTime();
+                callback(res);
+            })
+            .networkFail(() => {
+                RequestService.reAjaxFun(() => {
+                    this.getAgentMcpConfig(agentId, callback);
+                });
+            }).send();
+    },
+    // 保存智能体角色级MCP配置(JSON, 标准 mcpServers)
+    saveAgentMcpConfig(agentId, config, callback) {
+        RequestService.sendRequest()
+            .url(`${getServiceUrl()}/agent/${agentId}/mcp-config`)
+            .method('PUT')
+            .data(config)
+            .success((res) => {
+                RequestService.clearRequestTime();
+                callback(res);
+            })
+            .networkFail(() => {
+                RequestService.reAjaxFun(() => {
+                    this.saveAgentMcpConfig(agentId, config, callback);
+                });
+            }).send();
+    },
 }

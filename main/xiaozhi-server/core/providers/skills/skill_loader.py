@@ -73,6 +73,12 @@ class SkillLoader:
 
             skills.append(skill)
 
+        # Names already provided by a file-system skill (incl. per-agent
+        # uploaded folders). An uploaded skill is delivered both as an
+        # in-memory definition AND scanned from disk; the disk copy has a real
+        # path so its py scripts can actually run, so it must win.
+        filesystem_names = {s.name for s in skills}
+
         # 2) In-memory skills (from the manager API / DB).
         # These are already filtered by their own `enabled` flag on the manager
         # side, so they are NOT subject to the global file-system allow-list
@@ -80,6 +86,11 @@ class SkillLoader:
         for skill_def in self.skill_defs:
             skill = self._load_memory_skill(skill_def)
             if not skill:
+                continue
+
+            if skill.name in filesystem_names:
+                # File-system copy (runnable) takes precedence over the
+                # in-memory definition with an empty path.
                 continue
 
             skills.append(skill)
@@ -195,6 +206,19 @@ class SkillLoader:
             for entry in sorted(os.scandir(abs_path), key=lambda item: item.name):
                 if entry.is_dir():
                     skill_dirs.append(entry.path)
+
+        # Per-agent uploaded skills (folder upload from the manager console).
+        # These MUST be on real disk so py scripts have a path to execute from;
+        # the in-memory copy delivered via skills_definitions has path="" and
+        # cannot run scripts, so the disk copy is preferred (see dedup above).
+        agent_id = self.config.get("agent_id")
+        if agent_id:
+            uploaded_base = os.environ.get("UPLOADED_SKILLS_DIR", "/uploaded_skills")
+            agent_skills_dir = os.path.join(uploaded_base, str(agent_id))
+            if os.path.isdir(agent_skills_dir):
+                for entry in sorted(os.scandir(agent_skills_dir), key=lambda item: item.name):
+                    if entry.is_dir():
+                        skill_dirs.append(entry.path)
 
         return skill_dirs
 

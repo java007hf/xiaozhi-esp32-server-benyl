@@ -933,6 +933,8 @@ class ConnectionHandler:
             self.config["context_providers"] = private_config["context_providers"]
         if private_config.get("skills_definitions", None) is not None:
             self.config["skills_definitions"] = private_config["skills_definitions"]
+        if private_config.get("agent_id", None) is not None:
+            self.config["agent_id"] = private_config["agent_id"]
         if private_config.get("mcp_servers", None) is not None:
             self.config["mcp_servers"] = private_config["mcp_servers"]
         if private_config.get("sandbox", None) is not None:

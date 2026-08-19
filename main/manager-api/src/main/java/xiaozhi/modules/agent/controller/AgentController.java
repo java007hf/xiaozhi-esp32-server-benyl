@@ -1,5 +1,9 @@
 package xiaozhi.modules.agent.controller;
 
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -18,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 
@@ -48,12 +53,11 @@ import xiaozhi.modules.agent.entity.AgentTemplateEntity;
 import xiaozhi.modules.agent.dto.AgentTagDTO;
 import xiaozhi.modules.agent.entity.AgentTagEntity;
 import xiaozhi.modules.agent.entity.AgentSkillEntity;
-import xiaozhi.modules.agent.entity.AgentMcpServerEntity;
+import xiaozhi.modules.agent.dao.AgentDao;
 import xiaozhi.modules.agent.service.AgentTagService;
 import xiaozhi.modules.agent.service.AgentChatAudioService;
 import xiaozhi.modules.agent.service.AgentChatHistoryService;
 import xiaozhi.modules.agent.service.AgentChatSummaryService;
-import xiaozhi.modules.agent.service.AgentMcpServerService;
 import xiaozhi.modules.agent.service.AgentService;
 import xiaozhi.modules.agent.service.AgentSkillService;
 import xiaozhi.modules.agent.service.AgentTemplateService;
@@ -71,7 +75,7 @@ public class AgentController {
     private final AgentService agentService;
     private final AgentTemplateService agentTemplateService;
     private final AgentSkillService agentSkillService;
-    private final AgentMcpServerService agentMcpServerService;
+    private final AgentDao agentDao;
     private final AgentChatHistoryService agentChatHistoryService;
     private final AgentChatAudioService agentChatAudioService;
     private final AgentChatSummaryService agentChatSummaryService;
@@ -375,22 +379,61 @@ public class AgentController {
         return new Result<Void>().ok(null);
     }
 
-    @GetMapping("/{id}/mcp-servers")
-    @Operation(summary = "获取智能体的MCP服务配置")
+    @GetMapping("/{id}/mcp-config")
+    @Operation(summary = "获取智能体的MCP服务配置(JSON格式, 标准 mcpServers)")
     @RequiresPermissions("sys:role:normal")
-    public Result<List<AgentMcpServerEntity>> getAgentMcpServers(@PathVariable("id") String id) {
+    public Result<Map<String, Object>> getAgentMcpConfig(@PathVariable("id") String id) {
         requireAgentPermission(id);
-        return new Result<List<AgentMcpServerEntity>>().ok(agentMcpServerService.getByAgentId(id));
+        AgentEntity agent = agentDao.selectById(id);
+        if (agent == null || StringUtils.isBlank(agent.getMcpConfig())) {
+            // 返回空模板, 方便前端 JSON 编辑器初始化
+            return new Result<Map<String, Object>>().ok(Collections.singletonMap("mcpServers", new LinkedHashMap<>()));
+        }
+        return new Result<Map<String, Object>>().ok(JsonUtils.parseMap(agent.getMcpConfig()));
     }
 
-    @PutMapping("/{id}/mcp-servers")
-    @Operation(summary = "保存智能体的MCP服务配置")
+    @PutMapping("/{id}/mcp-config")
+    @Operation(summary = "保存智能体的MCP服务配置(JSON格式, 标准 mcpServers)")
     @RequiresPermissions("sys:role:normal")
-    public Result<Void> saveAgentMcpServers(
+    public Result<Void> saveAgentMcpConfig(
             @PathVariable("id") String id,
-            @RequestBody List<AgentUpdateDTO.AgentMcpServerItem> mcpServers) {
+            @RequestBody Map<String, Object> mcpConfig) {
         requireAgentPermission(id);
-        agentMcpServerService.saveOrUpdateByAgentId(id, mcpServers, SecurityUser.getUserId());
+        Object servers = mcpConfig.get("mcpServers");
+        if (!(servers instanceof Map)) {
+            throw new RenException(ErrorCode.PARAM_JSON_INVALID, "mcpConfig 必须包含 mcpServers 对象");
+        }
+        AgentEntity agent = agentDao.selectById(id);
+        if (agent == null) {
+            throw new RenException(ErrorCode.AGENT_NOT_FOUND);
+        }
+        agent.setMcpConfig(JsonUtils.toJsonString(mcpConfig));
+        agentDao.updateById(agent);
+        return new Result<Void>().ok(null);
+    }
+
+    @PostMapping("/{id}/skills/upload")
+    @Operation(summary = "上传智能体的技能文件夹(含 py 脚本), 同名则覆盖")
+    @RequiresPermissions("sys:role:normal")
+    public Result<Void> uploadAgentSkillFolder(
+            @PathVariable("id") String id,
+            @RequestParam("files") MultipartFile[] files) throws IOException {
+        requireAgentPermission(id);
+        if (files == null || files.length == 0) {
+            throw new RenException(ErrorCode.PARAM_JSON_INVALID, "未接收到任何文件");
+        }
+        agentSkillService.uploadSkillFolder(id, SecurityUser.getUserId(), Arrays.asList(files));
+        return new Result<Void>().ok(null);
+    }
+
+    @DeleteMapping("/{id}/skills/{sid}")
+    @Operation(summary = "删除智能体的某个技能(含磁盘目录)")
+    @RequiresPermissions("sys:role:normal")
+    public Result<Void> deleteAgentSkill(
+            @PathVariable("id") String id,
+            @PathVariable("sid") String sid) {
+        requireAgentPermission(id);
+        agentSkillService.deleteSkillById(id, sid);
         return new Result<Void>().ok(null);
     }
 

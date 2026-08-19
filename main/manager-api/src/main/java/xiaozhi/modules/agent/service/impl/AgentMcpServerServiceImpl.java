@@ -17,8 +17,10 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import lombok.AllArgsConstructor;
 import xiaozhi.common.service.impl.BaseServiceImpl;
 import xiaozhi.common.utils.JsonUtils;
+import xiaozhi.modules.agent.dao.AgentDao;
 import xiaozhi.modules.agent.dao.AgentMcpServerDao;
 import xiaozhi.modules.agent.dto.AgentUpdateDTO.AgentMcpServerItem;
+import xiaozhi.modules.agent.entity.AgentEntity;
 import xiaozhi.modules.agent.entity.AgentMcpServerEntity;
 import xiaozhi.modules.agent.service.AgentMcpServerService;
 import xiaozhi.modules.device.service.DeviceService;
@@ -28,6 +30,7 @@ import xiaozhi.modules.device.service.DeviceService;
 public class AgentMcpServerServiceImpl extends BaseServiceImpl<AgentMcpServerDao, AgentMcpServerEntity> implements AgentMcpServerService {
 
     private final DeviceService deviceService;
+    private final AgentDao agentDao;
 
     @Override
     public List<AgentMcpServerEntity> getByAgentId(String agentId) {
@@ -95,31 +98,21 @@ public class AgentMcpServerServiceImpl extends BaseServiceImpl<AgentMcpServerDao
             return result;
         }
 
-        List<AgentMcpServerEntity> enabled = baseDao.selectList(
-                new QueryWrapper<AgentMcpServerEntity>().eq("agent_id", agentId).eq("enabled", 1).orderByAsc("sort"));
-
-        Map<String, Object> servers = new LinkedHashMap<>();
-        for (AgentMcpServerEntity e : enabled) {
-            Map<String, Object> cfg = new LinkedHashMap<>();
-            String transport = StringUtils.isBlank(e.getTransport()) ? "stdio" : e.getTransport();
-            if ("stdio".equals(transport)) {
-                cfg.put("command", e.getCommand());
-                if (StringUtils.isNotBlank(e.getArgs())) {
-                    cfg.put("args", parseJsonList(e.getArgs()));
-                }
-                if (StringUtils.isNotBlank(e.getEnv())) {
-                    cfg.put("env", parseJsonMap(e.getEnv()));
-                }
-            } else {
-                cfg.put("url", e.getUrl());
-                cfg.put("transport", transport);
-                if (StringUtils.isNotBlank(e.getHeaders())) {
-                    cfg.put("headers", parseJsonMap(e.getHeaders()));
-                }
-            }
-            servers.put(e.getServerName(), cfg);
+        AgentEntity agent = agentDao.selectById(agentId);
+        if (agent == null || StringUtils.isBlank(agent.getMcpConfig())) {
+            return result;
         }
-        result.put("mcp_servers", servers);
+
+        try {
+            Map<String, Object> root = JsonUtils.parseObject(
+                    agent.getMcpConfig(), new TypeReference<Map<String, Object>>() {
+                    });
+            if (root != null && root.get("mcpServers") instanceof Map) {
+                result.put("mcp_servers", root.get("mcpServers"));
+            }
+        } catch (Exception e) {
+            // 非法 JSON 忽略，返回空配置
+        }
         return result;
     }
 

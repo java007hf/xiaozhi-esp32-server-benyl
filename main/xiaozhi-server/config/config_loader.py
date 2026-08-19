@@ -112,6 +112,8 @@ async def get_private_config_from_api(config, device_id, client_id):
             private_config["skills_definitions"] = extra["skills_definitions"]
         if extra.get("sandbox"):
             private_config["sandbox"] = extra["sandbox"]
+        if extra.get("agent_id"):
+            private_config["agent_id"] = extra["agent_id"]
 
     mcp_servers = private_config.get("mcp_servers")
     if not mcp_servers:

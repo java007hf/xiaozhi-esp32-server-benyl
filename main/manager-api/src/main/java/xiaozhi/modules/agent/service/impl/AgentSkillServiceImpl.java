@@ -1,19 +1,27 @@
 package xiaozhi.modules.agent.service.impl;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.extension.repository.IRepository;
 import com.fasterxml.jackson.core.type.TypeReference;
 
-import lombok.AllArgsConstructor;
 import xiaozhi.common.exception.RenException;
 import xiaozhi.common.service.impl.BaseServiceImpl;
 import xiaozhi.common.utils.JsonUtils;
@@ -26,11 +34,18 @@ import xiaozhi.modules.agent.service.AgentSkillService;
 import xiaozhi.modules.device.service.DeviceService;
 
 @Service
-@AllArgsConstructor
 public class AgentSkillServiceImpl extends BaseServiceImpl<AgentSkillDao, AgentSkillEntity> implements AgentSkillService {
 
     private final DeviceService deviceService;
     private final AgentDao agentDao;
+    private final String skillsUploadBase;
+
+    public AgentSkillServiceImpl(DeviceService deviceService, AgentDao agentDao,
+            @Value("${agent.skills-upload-base:/uploaded_skills}") String skillsUploadBase) {
+        this.deviceService = deviceService;
+        this.agentDao = agentDao;
+        this.skillsUploadBase = skillsUploadBase;
+    }
 
     @Override
     public List<AgentSkillEntity> getByAgentId(String agentId) {
@@ -125,12 +140,172 @@ public class AgentSkillServiceImpl extends BaseServiceImpl<AgentSkillDao, AgentS
                 // 沙箱配置非法时忽略
             }
         }
+        // 供 Python 端按 agent 维度扫描上传的技能目录
+        result.put("agent_id", agentId);
         return result;
     }
 
     @Override
     public void deleteByAgentId(String agentId) {
         baseDao.delete(new QueryWrapper<AgentSkillEntity>().eq("agent_id", agentId));
+    }
+
+    @Override
+    public void uploadSkillFolder(String agentId, Long userId, List<MultipartFile> files) throws IOException {
+        if (files == null || files.isEmpty()) {
+            throw new RenException("请选择要上传的技能文件夹");
+        }
+        // 技能文件夹名取首个文件的相对路径首段(webkitdirectory 上传时 originalFilename 含相对路径)
+        String folderName = null;
+        for (MultipartFile f : files) {
+            String rel = normalizeRelPath(f.getOriginalFilename());
+            if (rel != null) {
+                folderName = rel.split("[/\\\\]", 2)[0];
+                break;
+            }
+        }
+        if (StringUtils.isBlank(folderName)) {
+            throw new RenException("无法识别技能文件夹");
+        }
+        validateFolderName(folderName);
+
+        Path base = Paths.get(skillsUploadBase).toAbsolutePath().normalize();
+        Path agentDir = base.resolve(agentId).normalize();
+        Path skillDir = agentDir.resolve(folderName).normalize();
+        if (!skillDir.startsWith(base)) {
+            throw new RenException("非法的技能文件夹名");
+        }
+        Files.createDirectories(skillDir);
+
+        boolean hasSkillMd = false;
+        String skillMdContent = null;
+        for (MultipartFile f : files) {
+            String rel = normalizeRelPath(f.getOriginalFilename());
+            if (rel == null) {
+                continue;
+            }
+            String[] parts = rel.split("[/\\\\]", 2);
+            String sub = parts.length > 1 ? parts[1] : "";
+            if (StringUtils.isBlank(sub)) {
+                continue; // 跳过目录占位
+            }
+            Path target = skillDir.resolve(sub).normalize();
+            if (!target.startsWith(skillDir)) {
+                continue; // 防目录穿越
+            }
+            Files.createDirectories(target.getParent());
+            try (java.io.InputStream in = f.getInputStream()) {
+                Files.copy(in, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            }
+            if (rel.toLowerCase().endsWith("skill.md")) {
+                hasSkillMd = true;
+                skillMdContent = new String(f.getBytes(), StandardCharsets.UTF_8);
+            }
+        }
+        if (!hasSkillMd) {
+            deleteDirectory(skillDir);
+            throw new RenException("技能文件夹必须包含 SKILL.md");
+        }
+
+        String[] meta = parseSkillMeta(skillMdContent);
+        String name = StringUtils.isNotBlank(meta[0]) ? meta[0] : folderName;
+        String description = meta[1];
+
+        Date now = new Date();
+        AgentSkillEntity existing = baseDao.selectOne(
+                new QueryWrapper<AgentSkillEntity>().eq("agent_id", agentId).eq("skill_name", folderName));
+        if (existing != null) {
+            existing.setContent(skillMdContent);
+            existing.setDescription(description);
+            existing.setEnabled(1);
+            existing.setUpdater(userId);
+            existing.setUpdatedAt(now);
+            baseDao.updateById(existing);
+        } else {
+            AgentSkillEntity e = new AgentSkillEntity();
+            e.setId(UUID.randomUUID().toString().replace("-", ""));
+            e.setAgentId(agentId);
+            e.setSkillName(folderName);
+            e.setDescription(description);
+            e.setContent(skillMdContent);
+            e.setEnabled(1);
+            e.setSort(0);
+            e.setCreator(userId);
+            e.setCreatedAt(now);
+            e.setUpdater(userId);
+            e.setUpdatedAt(now);
+            baseDao.insert(e);
+        }
+    }
+
+    @Override
+    public void deleteSkillById(String agentId, String skillId) {
+        AgentSkillEntity e = baseDao.selectById(skillId);
+        if (e == null) {
+            return;
+        }
+        baseDao.deleteById(skillId);
+        if (StringUtils.isNotBlank(e.getSkillName())) {
+            Path base = Paths.get(skillsUploadBase).toAbsolutePath().normalize();
+            Path skillDir = base.resolve(agentId).resolve(e.getSkillName()).normalize();
+            if (skillDir.startsWith(base)) {
+                deleteDirectory(skillDir);
+            }
+        }
+    }
+
+    private String normalizeRelPath(String original) {
+        if (original == null) {
+            return null;
+        }
+        return original.replace('\\', '/');
+    }
+
+    private void validateFolderName(String name) {
+        if (!name.matches("^[A-Za-z0-9_.\\-]+$")) {
+            throw new RenException("非法的技能文件夹名: " + name);
+        }
+    }
+
+    private String[] parseSkillMeta(String content) {
+        String name = "";
+        String description = "";
+        if (content == null) {
+            return new String[] { name, description };
+        }
+        boolean inFm = false;
+        for (String line : content.split("\n")) {
+            String t = line.trim();
+            if (t.equals("---")) {
+                inFm = !inFm;
+                continue;
+            }
+            if (inFm) {
+                if (t.startsWith("name:")) {
+                    name = t.substring(5).trim();
+                } else if (t.startsWith("description:")) {
+                    description = t.substring(12).trim();
+                }
+            }
+        }
+        return new String[] { name, description };
+    }
+
+    private void deleteDirectory(Path dir) {
+        try {
+            if (!Files.exists(dir)) {
+                return;
+            }
+            Files.walk(dir).sorted(Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (IOException ignored) {
+                    // 忽略删除失败
+                }
+            });
+        } catch (IOException ignored) {
+            // 忽略
+        }
     }
 
     private AgentSkillEntity toEntity(AgentSkillItem item, String agentId) {

@@ -23,18 +23,19 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import xiaozhi.modules.agent.dao.AgentDao;
 import xiaozhi.modules.agent.dao.AgentMcpServerDao;
 import xiaozhi.modules.agent.dto.AgentUpdateDTO.AgentMcpServerItem;
+import xiaozhi.modules.agent.entity.AgentEntity;
 import xiaozhi.modules.agent.entity.AgentMcpServerEntity;
-import xiaozhi.modules.agent.service.AgentService;
 import xiaozhi.modules.device.entity.DeviceEntity;
 import xiaozhi.modules.device.service.DeviceService;
 
 @SuppressWarnings({"unchecked", "rawtypes"})
 class AgentMcpServerServiceImplTest {
 
-    private AgentMcpServerServiceImpl build(AgentMcpServerDao dao, DeviceService deviceService, AgentService agentService) {
-        AgentMcpServerServiceImpl service = new AgentMcpServerServiceImpl(deviceService, agentService);
+    private AgentMcpServerServiceImpl build(AgentMcpServerDao dao, DeviceService deviceService, AgentDao agentDao) {
+        AgentMcpServerServiceImpl service = new AgentMcpServerServiceImpl(deviceService, agentDao);
         ReflectionTestUtils.setField(service, "baseDao", dao);
         return service;
     }
@@ -52,7 +53,7 @@ class AgentMcpServerServiceImplTest {
         AgentMcpServerDao dao = mock(AgentMcpServerDao.class);
         AgentMcpServerEntity e = new AgentMcpServerEntity();
         when(dao.selectList(any())).thenReturn(List.of(e));
-        AgentMcpServerServiceImpl service = build(dao, mock(DeviceService.class), mock(AgentService.class));
+        AgentMcpServerServiceImpl service = build(dao, mock(DeviceService.class), mock(AgentDao.class));
 
         List<AgentMcpServerEntity> result = service.getByAgentId("a1");
 
@@ -63,7 +64,7 @@ class AgentMcpServerServiceImplTest {
     @Test
     void saveOrUpdate_insertsNewServersAndSerializesFieldsToJson() {
         AgentMcpServerDao dao = mock(AgentMcpServerDao.class);
-        AgentMcpServerServiceImpl real = build(dao, mock(DeviceService.class), mock(AgentService.class));
+        AgentMcpServerServiceImpl real = build(dao, mock(DeviceService.class), mock(AgentDao.class));
         AgentMcpServerServiceImpl service = spyService(real);
         when(dao.selectList(any())).thenReturn(List.of());
 
@@ -98,7 +99,7 @@ class AgentMcpServerServiceImplTest {
     @Test
     void saveOrUpdate_updatesExistingAndDeletesMissing() {
         AgentMcpServerDao dao = mock(AgentMcpServerDao.class);
-        AgentMcpServerServiceImpl real = build(dao, mock(DeviceService.class), mock(AgentService.class));
+        AgentMcpServerServiceImpl real = build(dao, mock(DeviceService.class), mock(AgentDao.class));
         AgentMcpServerServiceImpl service = spyService(real);
 
         AgentMcpServerEntity existing1 = new AgentMcpServerEntity();
@@ -143,7 +144,7 @@ class AgentMcpServerServiceImplTest {
     @Test
     void saveOrUpdate_nullItemsReturnsEarly() {
         AgentMcpServerDao dao = mock(AgentMcpServerDao.class);
-        AgentMcpServerServiceImpl real = build(dao, mock(DeviceService.class), mock(AgentService.class));
+        AgentMcpServerServiceImpl real = build(dao, mock(DeviceService.class), mock(AgentDao.class));
         AgentMcpServerServiceImpl service = spyService(real);
 
         service.saveOrUpdateByAgentId("a1", null, 7L);
@@ -153,26 +154,23 @@ class AgentMcpServerServiceImplTest {
     }
 
     @Test
-    void getMcpServersForDevice_returnsEnabledServersWithStdioConfig() {
+    void getMcpServersForDevice_readsMcpConfigColumn() {
         AgentMcpServerDao dao = mock(AgentMcpServerDao.class);
         DeviceService deviceService = mock(DeviceService.class);
-        AgentService agentService = mock(AgentService.class);
+        AgentDao agentDao = mock(AgentDao.class);
 
         DeviceEntity device = new DeviceEntity();
         device.setAgentId("a1");
         when(deviceService.getDeviceByMacAddress("AA:BB")).thenReturn(device);
 
-        AgentMcpServerEntity enabled = new AgentMcpServerEntity();
-        enabled.setId("m1");
-        enabled.setServerName("filesystem");
-        enabled.setTransport("stdio");
-        enabled.setCommand("npx");
-        enabled.setArgs("[\"-y\",\"@modelcontextprotocol/server-filesystem\"]");
-        enabled.setEnv("{\"TOKEN\":\"abc\"}");
-        enabled.setEnabled(1);
-        when(dao.selectList(any())).thenReturn(List.of(enabled));
+        AgentEntity agent = new AgentEntity();
+        agent.setMcpConfig(
+                "{\"mcpServers\":{\"filesystem\":{\"command\":\"npx\","
+                        + "\"args\":[\"-y\",\"@modelcontextprotocol/server-filesystem\"],"
+                        + "\"env\":{\"TOKEN\":\"abc\"}}}}");
+        when(agentDao.selectById("a1")).thenReturn(agent);
 
-        AgentMcpServerServiceImpl service = build(dao, deviceService, agentService);
+        AgentMcpServerServiceImpl service = build(dao, deviceService, agentDao);
         Map<String, Object> result = service.getMcpServersForDevice("AA:BB", "cid");
 
         Map<String, Object> servers = (Map<String, Object>) result.get("mcp_servers");
@@ -185,25 +183,22 @@ class AgentMcpServerServiceImplTest {
     }
 
     @Test
-    void getMcpServersForDevice_returnsSseConfigForHttpTransports() {
+    void getMcpServersForDevice_returnsHttpConfigFromMcpConfig() {
         AgentMcpServerDao dao = mock(AgentMcpServerDao.class);
         DeviceService deviceService = mock(DeviceService.class);
-        AgentService agentService = mock(AgentService.class);
+        AgentDao agentDao = mock(AgentDao.class);
 
         DeviceEntity device = new DeviceEntity();
         device.setAgentId("a1");
         when(deviceService.getDeviceByMacAddress("AA:BB")).thenReturn(device);
 
-        AgentMcpServerEntity sse = new AgentMcpServerEntity();
-        sse.setId("m1");
-        sse.setServerName("remote");
-        sse.setTransport("sse");
-        sse.setUrl("http://localhost:9000/sse");
-        sse.setHeaders("{\"Authorization\":\"Bearer x\"}");
-        sse.setEnabled(1);
-        when(dao.selectList(any())).thenReturn(List.of(sse));
+        AgentEntity agent = new AgentEntity();
+        agent.setMcpConfig(
+                "{\"mcpServers\":{\"remote\":{\"url\":\"http://localhost:9000/sse\","
+                        + "\"transport\":\"sse\",\"headers\":{\"Authorization\":\"Bearer x\"}}}}");
+        when(agentDao.selectById("a1")).thenReturn(agent);
 
-        AgentMcpServerServiceImpl service = build(dao, deviceService, agentService);
+        AgentMcpServerServiceImpl service = build(dao, deviceService, agentDao);
         Map<String, Object> result = service.getMcpServersForDevice("AA:BB", "cid");
 
         Map<String, Object> servers = (Map<String, Object>) result.get("mcp_servers");
@@ -219,7 +214,7 @@ class AgentMcpServerServiceImplTest {
         AgentMcpServerDao dao = mock(AgentMcpServerDao.class);
         DeviceService deviceService = mock(DeviceService.class);
         when(deviceService.getDeviceByMacAddress("ZZ")).thenReturn(null);
-        AgentMcpServerServiceImpl service = build(dao, deviceService, mock(AgentService.class));
+        AgentMcpServerServiceImpl service = build(dao, deviceService, mock(AgentDao.class));
 
         Map<String, Object> result = service.getMcpServersForDevice("ZZ", "cid");
 
@@ -230,7 +225,7 @@ class AgentMcpServerServiceImplTest {
     @Test
     void deleteByAgentId_deletesByAgentId() {
         AgentMcpServerDao dao = mock(AgentMcpServerDao.class);
-        AgentMcpServerServiceImpl service = build(dao, mock(DeviceService.class), mock(AgentService.class));
+        AgentMcpServerServiceImpl service = build(dao, mock(DeviceService.class), mock(AgentDao.class));
 
         service.deleteByAgentId("a1");
 

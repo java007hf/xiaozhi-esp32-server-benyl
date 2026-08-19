@@ -22,11 +22,15 @@ services:
       - seccomp:unconfined
     environment:
       - TZ=Asia/Shanghai
+      # 与智控台共享的上传技能目录(Python 端按 agent_id 子目录扫描)
+      - UPLOADED_SKILLS_DIR=/uploaded_skills
     volumes:
       # 配置文件目录
       - ./data:/opt/xiaozhi-esp32-server/data
       # 模型文件挂接，很重要
       - ./models/SenseVoiceSmall/model.pt:/opt/xiaozhi-esp32-server/models/SenseVoiceSmall/model.pt
+      # 智能体上传的技能文件夹(与智控台共享, py 脚本需真实路径才能执行)
+      - ./uploaded_skills:/uploaded_skills
 
   # manager-api和manager-web模块
   xiaozhi-esp32-server-web:
@@ -55,6 +59,8 @@ services:
     volumes:
       # 配置文件目录
       - ./uploadfile:/uploadfile
+      # 智能体上传的技能文件夹(与 Python 服务共享)
+      - ./uploaded_skills:/uploaded_skills
   # 数据库模块
   xiaozhi-esp32-server-db:
     image: mysql:latest

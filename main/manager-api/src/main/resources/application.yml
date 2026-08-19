@@ -12,6 +12,10 @@ server:
       cookie:
         http-only: true
 
+  # 角色级技能文件夹上传根目录(共享卷, web 容器与 xiaozhi-server 容器需挂载同一目录)
+  agent:
+    skills-upload-base: /uploaded_skills
+
 spring:
   # 环境 dev|test|prod
   profiles:

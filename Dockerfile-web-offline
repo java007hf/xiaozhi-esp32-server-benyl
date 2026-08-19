@@ -1,17 +1,34 @@
 # 第一阶段：构建Vue前端
 FROM docker.m.daocloud.io/library/node:18 AS web-builder
 WORKDIR /app
+
+# 先只拷 package*.json：让 npm install 单独成层；package 文件不变时此层完全跳过
 COPY main/manager-web/package*.json ./
-RUN npm install
-COPY main/manager-web .
-RUN npm run build
+# BuildKit cache mount：node_modules 与 npm 缓存跨 build 复用
+RUN --mount=type=cache,target=/app/node_modules,id=nm \
+    --mount=type=cache,target=/root/.npm,id=npm \
+    npm install --no-audit --no-fund
+
+# 再拷源码；用同一份 node_modules 缓存 build
+COPY main/manager-web ./
+RUN --mount=type=cache,target=/app/node_modules,id=nm \
+    npm run build
 
 # 第二阶段：构建Java后端
 FROM docker.m.daocloud.io/library/maven:3.9.4-eclipse-temurin-21 AS api-builder
 WORKDIR /app
-COPY main/manager-api/pom.xml .
+
+# 先只拷 pom：让依赖下载单独成层；pom 不变时此层完全跳过
+COPY main/manager-api/pom.xml ./
+# BuildKit cache mount：.m2 仓库跨 build 复用
+RUN --mount=type=cache,target=/root/.m2,id=m2 \
+    mvn -B -ntp dependency:go-offline
+
+# 再拷源码
 COPY main/manager-api/src ./src
-RUN mvn clean package -Dmaven.test.skip=true
+# 编译（去掉 mvn clean，由 Docker layer 复用 target/）
+RUN --mount=type=cache,target=/root/.m2,id=m2 \
+    mvn -B -ntp package -DskipTests
 
 # 第三阶段：构建最终镜像
 FROM docker.m.daocloud.io/bellsoft/liberica-runtime-container:jre-21-glibc
@@ -29,8 +46,8 @@ RUN apk update && \
 # 复制项目自带的中文字体
 COPY main/manager-web/public/generator/static/fonts/*.ttf /usr/share/fonts/
 
-# 更新字体缓存
-RUN fc-cache -f -v
+# 更新字体缓存（-v 输出太多，构建日志里刷屏）
+RUN fc-cache -f
 
 # 配置Nginx
 COPY docs/docker/nginx.conf /etc/nginx/nginx.conf

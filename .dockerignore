@@ -1,7 +1,69 @@
+# ===== VCS 元数据 =====
 .git
-__pycache__
-*.pyc
+.gitattributes
+.gitignore
+.github
+
+# ===== 构建产物（不进 image，避免巨大体积和缓存抖动）=====
+**/node_modules
+**/target
+**/dist
+**/build
+**/.next
+**/.nuxt
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.class
+**/.m2
+**/.venv
+**/venv
+**/.pytest_cache
+**/.cache
+**/.gradle
+
+# ===== 本地数据 / 模型（compose 用 volume 挂载，不进 image）=====
+data
+models
+uploaded_skills
+uploadfile
+mysql
+**/logs
+**/*.log
+**/tmp
+tmp
+
+# ===== 离线 / 在线镜像 tar 包 =====
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+
+# ===== IDE / 编辑器 / OS =====
+.idea
+.vscode
+*.iml
+*.swp
+.DS_Store
+Thumbs.db
+
+# ===== 在线版 Dockerfile（deploy 脚本只用 -offline 版本）=====
+Dockerfile-server
+Dockerfile-server-base
+Dockerfile-web
+
+# ===== 部署/启动辅助脚本（不进 image）=====
+docker-setup.sh
+xiaozhi-server-local.tar
+xiaozhi-web-local.tar
+
+# ===== 项目根元信息 =====
+README.md
+LICENSE
+
+# ===== 本地配置 / 密钥 =====
 .env
-Dockerfile
-tmp/
-data/
+.env.*
+*.pem
+*.key
+secrets

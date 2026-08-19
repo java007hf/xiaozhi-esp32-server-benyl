@@ -89,6 +89,9 @@ public class AgentEntity {
     @Schema(description = "技能沙箱运行配置(JSON字符串)")
     private String sandboxConfig;
 
+    @Schema(description = "MCP服务配置(JSON, 标准 mcpServers 格式)")
+    private String mcpConfig;
+
     @Schema(description = "创建者")
     private Long creator;
 

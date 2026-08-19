@@ -120,8 +120,6 @@ public class AgentServiceImpl extends BaseServiceImpl<AgentDao, AgentEntity> imp
 
         // 查询角色级技能配置
         agent.setSkills(agentSkillService.getByAgentId(id));
-        // 查询角色级MCP服务配置
-        agent.setMcpServers(agentMcpServerService.getByAgentId(id));
 
         agent.setCurrentVersionNo(agentSnapshotService.getCurrentVersionNo(id));
 
@@ -548,11 +546,6 @@ public class AgentServiceImpl extends BaseServiceImpl<AgentDao, AgentEntity> imp
         // 更新角色级技能配置
         if (dto.getSkills() != null) {
             agentSkillService.saveOrUpdateByAgentId(agentId, dto.getSkills(), user.getId());
-        }
-
-        // 更新角色级MCP服务配置
-        if (dto.getMcpServers() != null) {
-            agentMcpServerService.saveOrUpdateByAgentId(agentId, dto.getMcpServers(), user.getId());
         }
 
         // 更新技能沙箱运行配置
