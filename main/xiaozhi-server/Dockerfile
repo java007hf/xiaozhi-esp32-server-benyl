@@ -20,4 +20,7 @@ RUN ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
     && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
     && ln -sf ../lib/node_modules/@larksuite/cli/scripts/run.js /usr/local/bin/lark-cli
 
-COPY core/utils/prompt_manager.py /opt/xiaozhi-esp32-server/core/utils/prompt_manager.py
+COPY app.py /opt/xiaozhi-esp32-server/app.py
+COPY config /opt/xiaozhi-esp32-server/config
+COPY core /opt/xiaozhi-esp32-server/core
+COPY plugins_func /opt/xiaozhi-esp32-server/plugins_func

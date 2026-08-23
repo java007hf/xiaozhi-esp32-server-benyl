@@ -5,7 +5,8 @@ __pycache__/
 *$py.class
 .vscode
 .claude
-AGENTS.md
+# Keep repository-level agent instructions versioned.
+!AGENTS.md
 
 # C extensions
 *.so

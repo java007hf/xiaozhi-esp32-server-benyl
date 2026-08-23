@@ -2,7 +2,7 @@
 import { getConfig, saveConnectionUrls } from '../../config/manager.js?v=0205';
 import { uiController } from '../../ui/controller.js?v=0205';
 import { log } from '../../utils/logger.js?v=0205';
-import { getAudioPlayer } from '../audio/player.js?v=0205';
+import { getAudioPlayer } from '../audio/player.js?v=0208';
 import { getAudioRecorder } from '../audio/recorder.js?v=0205';
 import { executeMcpTool, getMcpTools, setWebSocket as setMcpWebSocket } from '../mcp/tools.js?v=0205';
 import { webSocketConnect } from './ota-connector.js?v=0206';

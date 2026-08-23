@@ -13,12 +13,13 @@ class AudioRateController:
     解决高并发下的时间累积误差问题
     """
 
-    def __init__(self, frame_duration=60):
+    def __init__(self, frame_duration=60, initial_buffer_ms=300):
         """
         Args:
             frame_duration: 单个音频帧时长（毫秒），默认60ms
         """
         self.frame_duration = frame_duration
+        self.initial_buffer_ms = initial_buffer_ms
         self.queue = deque()
         self.play_position = 0  # 虚拟播放位置（毫秒）
         self.start_timestamp = None  # 开始时间戳（只读，不修改）
@@ -111,7 +112,7 @@ class AudioRateController:
 
             elif item_type == "audio":
                 if self.start_timestamp is None:
-                    self.start_timestamp = time.monotonic()
+                    self.start_timestamp = time.monotonic() + self.initial_buffer_ms / 1000
 
                 _, opus_packet = item
 

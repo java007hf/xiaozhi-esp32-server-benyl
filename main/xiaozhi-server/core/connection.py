@@ -285,8 +285,11 @@ class ConnectionHandler:
     async def _save_and_close(self, ws):
         """保存记忆并关闭连接"""
         try:
-            # 守护线程1：独立生成标题（不依赖记忆模型）
-            if self.session_id:
+            # Only generate a title when chat history is being reported. With
+            # chat_history_conf=0 there is no session history for the API to
+            # resolve, so the title endpoint would misleadingly return
+            # "Agent not found" even when the device is correctly bound.
+            if self.session_id and self.chat_history_conf != 0:
                 def generate_title_task():
                     try:
                         loop = asyncio.new_event_loop()

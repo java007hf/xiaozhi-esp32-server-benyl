@@ -1,6 +1,6 @@
 // 主应用入口
 import { checkOpusLoaded, initOpusEncoder } from './core/audio/opus-codec.js?v=0205';
-import { getAudioPlayer } from './core/audio/player.js?v=0205';
+import { getAudioPlayer } from './core/audio/player.js?v=0208';
 import { checkMicrophoneAvailability, isHttpNonLocalhost } from './core/audio/recorder.js?v=0205';
 import { initMcpTools } from './core/mcp/tools.js?v=0205';
 import { startWakewordBridgeListener } from './core/network/wakeword-bridge.js?v=0205';

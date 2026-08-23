@@ -144,6 +144,7 @@ class TTSProvider(TTSProviderBase):
         self.ws = None
         self.interface_type = InterfaceType.DUAL_STREAM
         self._monitor_task = None  # 监听任务引用
+        self.api_key = config.get("api_key")
         self.appId = config.get("appid")
         self.access_token = config.get("access_token")
         self.cluster = config.get("cluster")
@@ -151,10 +152,14 @@ class TTSProvider(TTSProviderBase):
         self.resource_type = True if self.resource_id == "seed-tts-2.0" else False
         self.report_on_last = self.resource_type
         self.activate_session = False
-        if config.get("private_voice"):
-            self.voice = config.get("private_voice")
-        else:
-            self.voice = config.get("speaker")
+        # The manager API currently writes the console selection to
+        # `private_voice`; `speaker` is the older local-config field.
+        # Prefer the API value so a stale local speaker cannot override it.
+        self.voice = config.get("private_voice") or config.get("speaker")
+        logger.bind(tag=TAG).info(
+            f"火山TTS实际使用音色: {self.voice} "
+            f"(private_voice={config.get('private_voice')}, speaker={config.get('speaker')})"
+        )
 
         # 默认 audio_params 配置
         default_audio_params = {
@@ -196,15 +201,27 @@ class TTSProvider(TTSProviderBase):
             ))
 
         self.ws_url = config.get("ws_url")
-        self.authorization = config.get("authorization")
-        self.header = {"Authorization": f"{self.authorization}{self.access_token}"}
+        self.authorization = config.get("authorization", "")
+        self.header = {"Authorization": f"{self.authorization}{self.api_key or self.access_token or ''}"}
         enable_ws_reuse_value = config.get("enable_ws_reuse", True)
         self.enable_ws_reuse = False if str(enable_ws_reuse_value).lower() == 'false' else True
         self.tts_text = ""
 
-        model_key_msg = check_model_key("TTS", self.access_token)
+        model_key_msg = check_model_key("TTS", self.api_key or self.access_token)
         if model_key_msg:
             logger.bind(tag=TAG).error(model_key_msg)
+
+    def _build_ws_headers(self):
+        headers = {
+            "X-Api-Resource-Id": self.resource_id,
+            "X-Api-Connect-Id": str(uuid.uuid4()),
+        }
+        if self.api_key:
+            headers["X-Api-Key"] = self.api_key
+        else:
+            headers["X-Api-App-Key"] = self.appId
+            headers["X-Api-Access-Key"] = self.access_token
+        return headers
 
     async def open_audio_channels(self, conn):
         try:
@@ -233,12 +250,7 @@ class TTSProvider(TTSProviderBase):
             # 建立新连接前取消旧监听任务
             await self._cancel_monitor_task()
 
-            ws_header = {
-                "X-Api-App-Key": self.appId,
-                "X-Api-Access-Key": self.access_token,
-                "X-Api-Resource-Id": self.resource_id,
-                "X-Api-Connect-Id": uuid.uuid4(),
-            }
+            ws_header = self._build_ws_headers()
             self.ws = await websockets.connect(
                 self.ws_url, additional_headers=ws_header, max_size=1000000000
             )
@@ -758,12 +770,7 @@ class TTSProvider(TTSProviderBase):
 
             async def _generate_audio():
                 # 创建新的WebSocket连接
-                ws_header = {
-                    "X-Api-App-Key": self.appId,
-                    "X-Api-Access-Key": self.access_token,
-                    "X-Api-Resource-Id": self.resource_id,
-                    "X-Api-Connect-Id": uuid.uuid4(),
-                }
+                ws_header = self._build_ws_headers()
                 ws = await websockets.connect(
                     self.ws_url, additional_headers=ws_header, max_size=1000000000
                 )

@@ -127,6 +127,9 @@ async def sendAudio(
     if audios is None or len(audios) == 0:
         return
 
+    # Volcengine audio is encoded as 60 ms Opus frames. A fixed cadence avoids
+    # the dynamic controller draining its queue in bursts when TTS packets
+    # arrive unevenly from the upstream websocket.
     send_delay = conn.config.get("tts_audio_send_delay", -1) / 1000.0
     is_single_packet = isinstance(audios, bytes)
 
@@ -183,7 +186,9 @@ def _get_or_create_rate_controller(
     if need_reset:
         # 创建或获取 rate_controller
         if not hasattr(conn, "audio_rate_controller"):
-            conn.audio_rate_controller = AudioRateController(frame_duration)
+            conn.audio_rate_controller = AudioRateController(
+                frame_duration, initial_buffer_ms=PRE_BUFFER_COUNT * frame_duration
+            )
         else:
             conn.audio_rate_controller.reset()
 
@@ -242,6 +247,8 @@ async def _send_audio_with_rate_control(
             return
 
         conn.last_activity_time = time.time() * 1000
+        rate_controller.add_audio(packet)
+        continue
 
         # 预缓冲：前N个包直接发送
         if flow_control["packet_count"] < PRE_BUFFER_COUNT:

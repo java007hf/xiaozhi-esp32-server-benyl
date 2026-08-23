@@ -80,7 +80,7 @@ export class StreamingContext {
         }
 
         const totalSamples = queuedSamples + scheduledSamples;
-        return Math.ceil(totalSamples / 960);
+        return Math.ceil(totalSamples / (this.sampleRate * 0.06));
     }
 
     // 清空所有音频缓冲

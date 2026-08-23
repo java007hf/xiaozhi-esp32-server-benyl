@@ -1,15 +1,17 @@
 // 音频播放模块
 import BlockingQueue from '../../utils/blocking-queue.js?v=0205';
 import { log } from '../../utils/logger.js?v=0205';
-import { createStreamingContext } from './stream-context.js?v=0205';
+import { createStreamingContext } from './stream-context.js?v=0208';
 
 // 音频播放器类
 export class AudioPlayer {
     constructor() {
         // 音频参数
-        this.SAMPLE_RATE = 16000;
+        // The server sends TTS Opus at 24 kHz. Keep the recorder's 16 kHz
+        // microphone format separate from the downstream playback format.
+        this.SAMPLE_RATE = 24000;
         this.CHANNELS = 1;
-        this.FRAME_SIZE = 960;
+        this.FRAME_SIZE = 1440;
         this.MIN_AUDIO_DURATION = 0.12;
 
         // 状态

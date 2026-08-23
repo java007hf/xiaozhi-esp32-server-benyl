@@ -822,13 +822,15 @@ TTS:
   HuoshanDoubleStreamTTS:
     type: huoshan_double_stream
     # 访问 https://console.volcengine.com/speech/service/10007 开通语音合成大模型，购买音色
-    # 在页面底部获取appid和access_token
+    # 新版火山控制台使用 API Key 鉴权；旧版 appid/access_token 仍兼容
     # 资源ID固定为：volc.service_type.10029（大模型语音合成及混音）
     # 如果是机智云，把接口地址换成wss://bytedance.gizwitsapi.com/api/v3/tts/bidirection
-    # 机智云不需要天填 appid
+    # 机智云不需要填 api_key
     ws_url: wss://openspeech.bytedance.com/api/v3/tts/bidirection
-    appid: 你的火山引擎语音合成服务appid
-    access_token: 你的火山引擎语音合成服务access_token
+    api_key: 你的火山引擎语音合成服务API Key
+    # 旧版控制台鉴权字段，仅在未配置 api_key 时使用
+    # appid: 你的火山引擎语音合成服务appid
+    # access_token: 你的火山引擎语音合成服务access_token
     resource_id: volc.service_type.10029
     speaker: zh_female_wanwanxiaohe_moon_bigtts
     # 开启WebSocket连接复用，默认复用（注意：复用后设备处于聆听状态时空闲链接会占并发数）
@@ -863,13 +865,15 @@ TTS:
   HuoshanDoubleStreamTTSV2:
     type: huoshan_double_stream
     # 访问 https://console.volcengine.com/speech/service/10035 开通语音合成大模型，购买音色
-    # 在页面底部获取appid和access_token
+    # 新版火山控制台使用 API Key 鉴权；旧版 appid/access_token 仍兼容
     # 资源ID固定为：seed-tts-2.0（豆包语音合成模型2.0）
     # 如果是机智云，把接口地址换成wss://bytedance.gizwitsapi.com/api/v3/tts/bidirection
-    # 机智云不需要天填 appid
+    # 机智云不需要填 api_key
     ws_url: wss://openspeech.bytedance.com/api/v3/tts/bidirection
-    appid: 你的火山引擎语音合成服务appid
-    access_token: 你的火山引擎语音合成服务access_token
+    api_key: 你的火山引擎语音合成服务API Key
+    # 旧版控制台鉴权字段，仅在未配置 api_key 时使用
+    # appid: 你的火山引擎语音合成服务appid
+    # access_token: 你的火山引擎语音合成服务access_token
     resource_id: seed-tts-2.0
     speaker: zh_female_xiaohe_uranus_bigtts
     # 开启WebSocket连接复用，默认复用（注意：复用后设备处于聆听状态时空闲链接会占并发数）
