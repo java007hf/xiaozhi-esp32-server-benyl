@@ -99,7 +99,15 @@ class ServerPluginExecutor(ToolExecutor):
         tools = {}
 
         # 获取必要的函数
-        necessary_functions = ["handle_exit_intent", "get_lunar"]
+        # These device-display tools are part of this deployment's built-in
+        # capabilities. Keep them available even when manager-api replaces the
+        # agent function list with a shorter console configuration.
+        necessary_functions = [
+            "handle_exit_intent",
+            "get_lunar",
+            "show_hanzi_bitmap",
+            "show_hanzi_stroke_animation",
+        ]
 
         # 获取配置中的函数
         config_functions = self.config["Intent"][
