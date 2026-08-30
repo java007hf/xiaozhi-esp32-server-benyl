@@ -41,6 +41,46 @@ def manager_skill_def(
 
 
 class SkillConfigManagerFeedTests(unittest.TestCase):
+    def test_metadata_only_manager_skill_loads_from_shared_filesystem(self):
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "uploaded" / "agent-1" / "car-control"
+            root.mkdir(parents=True)
+            (root / "SKILL.md").write_text(
+                "---\nname: car-control\ndescription: From disk.\n---\n\nDisk instructions.",
+                encoding="utf-8",
+            )
+            config = {
+                "skills": {"paths": []},
+                "agent_id": "agent-1",
+                "skills_definitions": [
+                    {
+                        "id": "skill-1",
+                        "name": "car-control",
+                        "directory": "car-control",
+                        "description": "From manager metadata.",
+                        "functions": ["activate_skill"],
+                    }
+                ],
+            }
+            import os
+
+            previous = os.environ.get("UPLOADED_SKILLS_DIR")
+            os.environ["UPLOADED_SKILLS_DIR"] = str(Path(tmp) / "uploaded")
+            try:
+                skill = SkillLoader(config).get_skill("car-control")
+            finally:
+                if previous is None:
+                    os.environ.pop("UPLOADED_SKILLS_DIR", None)
+                else:
+                    os.environ["UPLOADED_SKILLS_DIR"] = previous
+
+            self.assertIsNotNone(skill)
+            self.assertEqual(skill.source, "filesystem")
+            self.assertEqual(skill.prompt, "Disk instructions.")
+
     def test_skills_definitions_picked_up_via_config_fallback(self):
         # connection.py sets conn.config["skills_definitions"]; SkillLoader must
         # read it even when no explicit skill_definitions argument is passed.

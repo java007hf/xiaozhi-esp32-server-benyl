@@ -156,6 +156,8 @@ tmp
 .DS_Store
 main/xiaozhi-server/data
 main/xiaozhi-server/.claude
+# Uploaded agent skills are runtime data stored in the Docker bind mount.
+main/xiaozhi-server/uploaded_skills/
 
 main/manager-web/node_modules
 .config.yaml

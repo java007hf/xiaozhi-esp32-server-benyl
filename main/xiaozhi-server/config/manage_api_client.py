@@ -199,9 +199,10 @@ async def get_correct_words(mac_address: str) -> Optional[Dict]:
 async def get_agent_skills(
     mac_address: str, client_id: str, config: Optional[Dict] = None
 ) -> Optional[Dict]:
-    """获取角色级技能定义与沙箱配置(供技能加载)
+    """获取角色级技能索引与沙箱配置(供技能加载)
 
-    返回形如 {"skills_definitions": [...], "sandbox": {...}} 的字典。
+    返回的 skills_definitions 只包含启用技能的元数据；完整 SKILL.md 和
+    资源文件由 xiaozhi-server 从共享的 UPLOADED_SKILLS_DIR 读取。
     """
     try:
         return await ManageApiClient._instance._execute_async_request(

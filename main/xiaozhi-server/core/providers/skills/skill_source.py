@@ -1,10 +1,8 @@
-"""In-memory skill definitions sourced from the manager API.
+"""Skill metadata sourced from the manager API.
 
-When skills are managed in the console (CRUD in the database) instead of -- or
-in addition to -- the file-system ``skills/`` directory, the server receives
-their definitions through the agent private config (``skills_definitions``).
-These definitions are kept in memory per connection and merged with the
-file-system scan by :class:`core.providers.skills.skill_loader.SkillLoader`.
+The manager API provides the enabled skill index for an agent. The full
+SKILL.md and resource files are loaded from the shared filesystem by
+:class:`core.providers.skills.skill_loader.SkillLoader`.
 """
 
 from __future__ import annotations
@@ -15,11 +13,12 @@ from typing import Any, Dict, List
 
 @dataclass
 class SkillDef:
-    """A skill definition delivered from the manager (API / DB), not from disk."""
+    """Skill metadata delivered from the manager API."""
 
     name: str
     description: str = ""
-    content: str = ""  # full SKILL.md text (YAML frontmatter + Markdown body)
+    directory: str = ""  # agent skill directory name on the shared filesystem
+    content: str = ""  # legacy in-memory skills only
     functions: List[str] = field(default_factory=list)
     files: Dict[str, str] = field(default_factory=dict)  # relative path -> file content
     skill_id: str = ""
@@ -32,15 +31,15 @@ class SkillDef:
 def parse_skill_def(raw: Dict[str, Any]) -> SkillDef | None:
     """Build a :class:`SkillDef` from a raw API dictionary.
 
-    Accepts either a fully-formed ``content`` (the whole SKILL.md) or explicit
-    ``name`` / ``description`` / ``functions`` / ``files`` fields. Returns
-    ``None`` when the definition carries neither a usable name nor content.
+    Accepts metadata from the manager API. ``content`` remains supported for
+    legacy in-memory callers, but uploaded skills must be loaded from disk.
     """
     if not isinstance(raw, dict):
         return None
 
     name = str(raw.get("name") or "").strip()
     description = str(raw.get("description") or "").strip()
+    directory = str(raw.get("directory") or raw.get("skill_name") or name).strip()
     content = str(raw.get("content") or "")
     functions = raw.get("functions") or []
     if not isinstance(functions, list):
@@ -65,6 +64,7 @@ def parse_skill_def(raw: Dict[str, Any]) -> SkillDef | None:
     return SkillDef(
         name=name,
         description=description,
+        directory=directory,
         content=content,
         functions=[str(item) for item in functions],
         files={str(key): str(value) for key, value in files.items()},

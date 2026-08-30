@@ -124,8 +124,9 @@ public class AgentSkillServiceImpl extends BaseServiceImpl<AgentSkillDao, AgentS
             Map<String, Object> def = new HashMap<>();
             def.put("id", e.getId());
             def.put("name", e.getSkillName());
+            // The skill directory is the source of the full SKILL.md and resources.
+            def.put("directory", e.getSkillName());
             def.put("description", e.getDescription());
-            def.put("content", e.getContent());
             def.put("functions", parseJsonList(e.getFunctions()));
             def.put("files", parseJsonMap(e.getFiles()));
             definitions.add(def);
@@ -208,14 +209,14 @@ public class AgentSkillServiceImpl extends BaseServiceImpl<AgentSkillDao, AgentS
         }
 
         String[] meta = parseSkillMeta(skillMdContent);
-        String name = StringUtils.isNotBlank(meta[0]) ? meta[0] : folderName;
-        String description = meta[1];
+        String description = StringUtils.left(meta[1], 512);
 
         Date now = new Date();
         AgentSkillEntity existing = baseDao.selectOne(
                 new QueryWrapper<AgentSkillEntity>().eq("agent_id", agentId).eq("skill_name", folderName));
         if (existing != null) {
-            existing.setContent(skillMdContent);
+            // SKILL.md is authoritative on the shared filesystem. Keep only metadata in DB.
+            existing.setContent(null);
             existing.setDescription(description);
             existing.setEnabled(1);
             existing.setUpdater(userId);
@@ -227,7 +228,7 @@ public class AgentSkillServiceImpl extends BaseServiceImpl<AgentSkillDao, AgentS
             e.setAgentId(agentId);
             e.setSkillName(folderName);
             e.setDescription(description);
-            e.setContent(skillMdContent);
+            e.setContent(null);
             e.setEnabled(1);
             e.setSort(0);
             e.setCreator(userId);
@@ -313,7 +314,6 @@ public class AgentSkillServiceImpl extends BaseServiceImpl<AgentSkillDao, AgentS
         entity.setAgentId(agentId);
         entity.setSkillName(item.getSkillName());
         entity.setDescription(item.getDescription());
-        entity.setContent(item.getContent());
         entity.setFunctions(item.getFunctions() == null ? null : JsonUtils.toJsonString(item.getFunctions()));
         entity.setFiles(item.getFiles() == null ? null : JsonUtils.toJsonString(item.getFiles()));
         entity.setEnabled(item.getEnabled() != null && item.getEnabled() ? 1 : 0);

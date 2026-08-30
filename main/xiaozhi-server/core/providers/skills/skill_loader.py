@@ -38,13 +38,17 @@ class SkillLoader:
     def __init__(self, config: Dict[str, Any], skill_definitions: Optional[List[Dict[str, Any]]] = None):
         self.config = config or {}
         self.skills_config = self.config.get("skills", {}) or {}
-        # In-memory skill definitions delivered from the manager (API / DB).
+        # Skill metadata delivered from the manager API. The actual uploaded
+        # files are always loaded from the shared filesystem.
+        manager_definitions_provided = skill_definitions is not None
         # Fall back to `config["skills_definitions"]` so callers that build a
         # SkillLoader from a connection config (e.g. `SkillLoader(self.config)`)
         # also pick up manager-delivered skills.
         if skill_definitions is None:
+            manager_definitions_provided = "skills_definitions" in self.config
             skill_definitions = self.config.get("skills_definitions")
         self.skill_defs = parse_skill_defs(skill_definitions)
+        self._manager_definitions_provided = manager_definitions_provided
         self._skills: List[Skill] | None = None
 
     def get_enabled_skills(self) -> List[Skill]:
@@ -73,17 +77,16 @@ class SkillLoader:
 
             skills.append(skill)
 
-        # Names already provided by a file-system skill (incl. per-agent
-        # uploaded folders). An uploaded skill is delivered both as an
-        # in-memory definition AND scanned from disk; the disk copy has a real
-        # path so its py scripts can actually run, so it must win.
+        # Manager definitions are an enabled/index list for uploaded skills.
+        # The filesystem copy has the real path and full instructions, so it
+        # must win over legacy in-memory definitions when both are present.
         filesystem_names = {s.name for s in skills}
 
-        # 2) In-memory skills (from the manager API / DB).
-        # These are already filtered by their own `enabled` flag on the manager
-        # side, so they are NOT subject to the global file-system allow-list
-        # (otherwise role-level skills could be silently hidden).
+        # 2) Legacy in-memory skills. Metadata-only manager definitions are
+        # intentionally skipped because their content is not authoritative.
         for skill_def in self.skill_defs:
+            if not skill_def.has_content:
+                continue
             skill = self._load_memory_skill(skill_def)
             if not skill:
                 continue
@@ -208,16 +211,23 @@ class SkillLoader:
                     skill_dirs.append(entry.path)
 
         # Per-agent uploaded skills (folder upload from the manager console).
-        # These MUST be on real disk so py scripts have a path to execute from;
-        # the in-memory copy delivered via skills_definitions has path="" and
-        # cannot run scripts, so the disk copy is preferred (see dedup above).
+        # These MUST be on real disk so py scripts and references have a path
+        # to execute/read from. When manager metadata is present, it is also
+        # the enabled allow-list for this agent's uploaded directories.
         agent_id = self.config.get("agent_id")
         if agent_id:
             uploaded_base = os.environ.get("UPLOADED_SKILLS_DIR", "/uploaded_skills")
             agent_skills_dir = os.path.join(uploaded_base, str(agent_id))
             if os.path.isdir(agent_skills_dir):
+                allowed_dirs = {
+                    skill.directory or skill.name
+                    for skill in self.skill_defs
+                }
                 for entry in sorted(os.scandir(agent_skills_dir), key=lambda item: item.name):
-                    if entry.is_dir():
+                    if entry.is_dir() and (
+                        not self._manager_definitions_provided
+                        or entry.name in allowed_dirs
+                    ):
                         skill_dirs.append(entry.path)
 
         return skill_dirs

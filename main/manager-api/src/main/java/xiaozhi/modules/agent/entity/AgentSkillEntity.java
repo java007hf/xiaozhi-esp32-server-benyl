@@ -27,13 +27,14 @@ public class AgentSkillEntity {
     @Schema(description = "技能描述")
     private String description;
 
-    @Schema(description = "完整 SKILL.md(含YAML frontmatter)")
+    @Deprecated
+    @Schema(description = "历史字段，不再作为技能内容来源")
     private String content;
 
     @Schema(description = "JSON数组: 绑定的函数名")
     private String functions;
 
-    @Schema(description = "JSON对象: 相对路径->文件内容(in-memory技能用)")
+    @Schema(description = "JSON对象: 相对路径->文件内容(仅兼容内存技能)")
     private String files;
 
     @Schema(description = "是否启用")

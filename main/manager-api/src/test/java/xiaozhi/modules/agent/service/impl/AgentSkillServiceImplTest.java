@@ -229,9 +229,35 @@ class AgentSkillServiceImplTest {
 
             Path written = base.resolve("a1").resolve("my-skill").resolve("SKILL.md");
             assertTrue(Files.exists(written));
-            ArgumentCaptor<List<AgentSkillEntity>> cap = ArgumentCaptor.forClass(List.class);
-            verify(service).insertBatch(cap.capture(), anyInt());
-            assertEquals("my-skill", cap.getValue().get(0).getSkillName());
+            ArgumentCaptor<AgentSkillEntity> cap = ArgumentCaptor.forClass(AgentSkillEntity.class);
+            verify(dao).insert(cap.capture());
+            assertEquals("my-skill", cap.getValue().getSkillName());
+        } finally {
+            deleteRecursively(base);
+        }
+    }
+
+    @Test
+    void uploadSkillFolder_truncatesLongDescriptionForDatabase() throws IOException {
+        AgentSkillDao dao = mock(AgentSkillDao.class);
+        Path base = Files.createTempDirectory("skills-upload-description-test");
+        try {
+            AgentSkillServiceImpl service = build(dao, mock(DeviceService.class), mock(AgentDao.class));
+            ReflectionTestUtils.setField(service, "skillsUploadBase", base.toString());
+            when(dao.selectOne(any())).thenReturn(null);
+
+            String longDescription = "x".repeat(600);
+            MockMultipartFile file = new MockMultipartFile(
+                    "files",
+                    "imagegen/SKILL.md",
+                    "text/markdown",
+                    ("---\nname: imagegen\ndescription: " + longDescription + "\n---\nbody")
+                            .getBytes(StandardCharsets.UTF_8));
+            service.uploadSkillFolder("a1", 7L, List.of(file));
+
+            ArgumentCaptor<AgentSkillEntity> cap = ArgumentCaptor.forClass(AgentSkillEntity.class);
+            verify(dao).insert(cap.capture());
+            assertEquals(512, cap.getValue().getDescription().length());
         } finally {
             deleteRecursively(base);
         }
